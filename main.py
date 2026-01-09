@@ -10,6 +10,8 @@ from invoice_llm_extractor import InvoiceLLMExtractor
 from courier_dispatch_advice import CourierDispatchAdviceLLMExtractor
 from airway_bill_llm_extractor import AirWaybillLLMExtractor
 from letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
+from email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
+
 
 
 
@@ -109,10 +111,16 @@ def run_textract_local(file_path: str) -> Dict[str, Any]:
 # Example usage
 # ===============================
 def main():
-    # Step 1: Run Textract + normalization
-    normalized_doc = run_textract_local(
-        "Edited_Air_Way_Bill_sample.pdf"
-    )
+    
+    
+    
+
+    # Step 2: Run Textract on attachment
+   
+    mail_data = fetch_unread_mbd_emirates_attachments()
+
+    for file_path in mail_data["files"]:
+        normalized_doc = run_textract_local(file_path)
 
     print(normalized_doc)
     
