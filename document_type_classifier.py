@@ -2,7 +2,9 @@ import os
 import json
 from openai import AzureOpenAI
 from dotenv import load_dotenv
+
 load_dotenv()
+
 
 class DocumentTypeClassifier:
     """
@@ -11,6 +13,7 @@ class DocumentTypeClassifier:
     - AIR_WAYBILL
     - COURIER_DISPATCH_ADVICE
     - LETTER_OF_CREDIT
+    - CERTIFICATE_OF_ORIGIN
     """
 
     ALLOWED_TYPES = [
@@ -18,6 +21,7 @@ class DocumentTypeClassifier:
         "AIR_WAYBILL",
         "COURIER_DISPATCH_ADVICE",
         "LETTER_OF_CREDIT",
+        "CERTIFICATE_OF_ORIGIN",
     ]
 
     def __init__(self):
@@ -41,30 +45,53 @@ class DocumentTypeClassifier:
         }
 
         returns:
-        INVOICE | AIR_WAYBILL | COURIER_DISPATCH_ADVICE | LETTER_OF_CREDIT
+        INVOICE | AIR_WAYBILL | COURIER_DISPATCH_ADVICE |
+        LETTER_OF_CREDIT | CERTIFICATE_OF_ORIGIN
         """
 
         system_prompt = (
-                "You are a Trade Finance logistics document classifier.\n\n"
-                "Classify the document into EXACTLY ONE of:\n"
-                "INVOICE, AIR_WAYBILL, COURIER_DISPATCH_ADVICE, LETTER_OF_CREDIT.\n\n"
-                "IMPORTANT DISTINCTION RULES:\n"
-                "1. AIR_WAYBILL:\n"
-                "- Issued by an airline or air cargo carrier\n"
-                "- Contains flight number and airport routing\n"
-                "- Mentions Air Waybill as a transport contract\n"
-                "- Includes weight or valuation charges\n\n"
-                "2. COURIER_DISPATCH_ADVICE:\n"
-                "- Issued by courier or express companies\n"
-                "- Contains HAWB number\n"
-                "- Mentions Express, Economy, Pickup, Charges\n"
-                "- Used for document or small parcel dispatch\n\n"
-                "Rules:\n"
-                "- If courier indicators exist → COURIER_DISPATCH_ADVICE\n"
-                "- If airline transport indicators exist → AIR_WAYBILL\n"
-                "- Output ONLY the document type string"
-            )
+            "You are a Trade Finance document classifier used by a bank.\n\n"
+            "Classify the document into EXACTLY ONE of:\n"
+            "INVOICE, AIR_WAYBILL, COURIER_DISPATCH_ADVICE, "
+            "LETTER_OF_CREDIT, CERTIFICATE_OF_ORIGIN.\n\n"
 
+            "STRICT IDENTIFICATION RULES:\n\n"
+
+            "1. CERTIFICATE_OF_ORIGIN:\n"
+            "- Explicitly contains the title 'CERTIFICATE OF ORIGIN'\n"
+            "- Mentions Chamber of Commerce or issuing authority\n"
+            "- Contains declarations by Chamber and Exporter\n"
+            "- Mentions country of origin\n"
+            "- Often includes LC number and invoice reference\n"
+            "- NOT a transport contract and NOT a billing document\n\n"
+
+            "2. AIR_WAYBILL:\n"
+            "- Issued by an airline or air cargo carrier\n"
+            "- Mentions Air Waybill or AWB\n"
+            "- Contains flight number and airport routing\n"
+            "- Serves as a transport contract\n\n"
+
+            "3. COURIER_DISPATCH_ADVICE:\n"
+            "- Issued by courier or express companies\n"
+            "- Mentions courier, express, pickup, delivery\n"
+            "- Contains HAWB or courier tracking number\n"
+            "- Used for document or parcel dispatch\n\n"
+
+            "4. INVOICE:\n"
+            "- Contains pricing, total amount, currency\n"
+            "- Seller and buyer commercial transaction\n"
+            "- Commercial or Proforma Invoice\n\n"
+
+            "5. LETTER_OF_CREDIT:\n"
+            "- Issued by a bank\n"
+            "- Contains LC terms, conditions, availability\n"
+            "- References UCP, issuing bank, advising bank\n\n"
+
+            "PRIORITY RULES:\n"
+            "- If 'CERTIFICATE OF ORIGIN' appears → CERTIFICATE_OF_ORIGIN\n"
+            "- Do NOT confuse Certificate of Origin with Air Waybill\n"
+            "- Output ONLY the document type string\n"
+        )
 
         response = self.client.chat.completions.create(
             model=self.deployment,
@@ -77,7 +104,7 @@ class DocumentTypeClassifier:
 
         result = response.choices[0].message.content.strip()
 
-        # Safety check (hard guard)
+        # Hard safety guard
         if result not in self.ALLOWED_TYPES:
             raise ValueError(f"Unexpected classification result: {result}")
 

@@ -11,8 +11,8 @@ from courier_dispatch_advice import CourierDispatchAdviceLLMExtractor
 from airway_bill_llm_extractor import AirWaybillLLMExtractor
 from letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
 from email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
-
-
+from summarize_llm import SummarizeLLM
+from certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
 
 
 load_dotenv()
@@ -111,65 +111,86 @@ def run_textract_local(file_path: str) -> Dict[str, Any]:
 # Example usage
 # ===============================
 def main():
-    
-    
-    
-
-    # Step 2: Run Textract on attachment
-   
+    # --------------------------------
+    # Step 1: Fetch unread email attachments
+    # --------------------------------
     mail_data = fetch_unread_mbd_emirates_attachments()
 
-    for file_path in mail_data["files"]:
-        normalized_doc = run_textract_local(file_path)
+    attachment_files = mail_data["files"]
 
-    print(normalized_doc)
-    
-    if not normalized_doc:
-        print("❌ Textract failed or returned empty result")
-        return
+    print(f"📂 Processing {len(attachment_files)} attachment(s)")
 
+    # --------------------------------
     # Step 2: Initialize classifier
+    # --------------------------------
     classifier = DocumentTypeClassifier()
 
-    # Step 3: Classify document
-    doc_type = classifier.classify(normalized_doc)
+    # --------------------------------
+    # Step 3: FINAL OUTPUT CONTAINER
+    # --------------------------------
+    final_llm_results = []  # 🔑 dynamic container
 
-    print("📄 DOCUMENT TYPE IDENTIFIED:", doc_type)
-    
-     # Step 2: If invoice → extract fields
-    if doc_type == "INVOICE":
-        invoice_extractor = InvoiceLLMExtractor()
-        invoice_data = invoice_extractor.extract(normalized_doc)
+    # --------------------------------
+    # Step 4: Process each file
+    # --------------------------------
+    for file_path in attachment_files:
+        print(f"\n📄 Processing file: {file_path}")
 
-        print("🧾 Extracted Invoice Fields:")
-        print(invoice_data)
-        
-    elif doc_type == "COURIER_DISPATCH_ADVICE":
-        extractor = CourierDispatchAdviceLLMExtractor()
-        courier_data = extractor.extract(normalized_doc)
+        normalized_doc = run_textract_local(file_path)
+        print(normalized_doc)
 
-        print("📦 COURIER DISPATCH ADVICE DATA:")
-        print(courier_data)
-        
-    elif doc_type == "AIR_WAYBILL":
-        extractor = AirWaybillLLMExtractor()
-        awb_data = extractor.extract(normalized_doc)
+        if not normalized_doc:
+            print("⚠️ Skipping empty Textract result")
+            continue
 
-        print("✈️ AIR WAYBILL DATA:")
-        print(awb_data)
-        
-    elif doc_type == "LETTER_OF_CREDIT":
-        extractor = LetterOfCreditLLMExtractor()
-        lc_data = extractor.extract(normalized_doc)
+        doc_type = classifier.classify(normalized_doc)
+        print("📌 Document Type:", doc_type)
 
-        print("🏦 LETTER OF CREDIT DATA:")
-        print(lc_data)
+        extracted_data = None
 
-        
-        
-    else:
-        print("ℹ️ No extractor configured for this document type yet")
+        if doc_type == "INVOICE":
+            extracted_data = InvoiceLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "COURIER_DISPATCH_ADVICE":
+            extracted_data = CourierDispatchAdviceLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "AIR_WAYBILL":
+            extracted_data = AirWaybillLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "LETTER_OF_CREDIT":
+            extracted_data = LetterOfCreditLLMExtractor().extract(normalized_doc)
+            
+        elif doc_type == "CERTIFICATE_OF_ORIGIN":
+            extracted_data = CertificateOfOriginLLMExtractor().extract(normalized_doc)
 
 
-if __name__ == "__main__":
-    main()
+        else:
+            print("ℹ️ No extractor configured for this document type")
+
+        # --------------------------------
+        # Step 5: Store output dynamically
+        # --------------------------------
+        final_llm_results.append({
+            "file_name": os.path.basename(file_path),
+            "doc_type": doc_type,
+            "extracted_data": extracted_data
+        })
+
+    # --------------------------------
+    # Step 6: Final Output
+    # --------------------------------
+    print("\n✅ FINAL LLM OUTPUT (ALL FILES)")
+    for result in final_llm_results:
+        print(result)
+
+    # This variable is what you store in DB / JSON / API
+    return final_llm_results
+
+
+
+finall_results=main()
+
+print('*************************')
+summarized_data = SummarizeLLM().extract(finall_results)
+
+print(summarized_data)
