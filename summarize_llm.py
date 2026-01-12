@@ -7,7 +7,6 @@ load_dotenv()
 
 
 system_prompt = """
-
 You are a trade finance operations assistant for a bank.
 
 You will be given structured data extracted from:
@@ -20,24 +19,99 @@ Your task is to:
 1. Check document completeness against LC requirements
 2. Check consistency across documents
 3. Check compliance with LC conditions
-4. Identify discrepancies clearly and factually
-5. Summarize the overall status in simple banking language
+4. Identify observations clearly and factually
+5. Summarize the review outcome in simple banking language
 
 Rules:
 - Do NOT assume intent or make commercial judgments
 - Treat LC terms as strict
-- Highlight only document-based issues
-- Classify each issue as:
-  - Minor discrepancy
-  - Major discrepancy
-  - Compliant
+- Highlight only document-based observations
+- Use professional, neutral, and positive trade-finance language
+- Do NOT invent LC clauses or requirements not present in the data
 
-Output format:
-- Overall Status: COMPLIANT / DISCREPANCIES FOUND
-- Summary (2–3 lines)
-- Detailed Findings (bullet points)
-- Missing Documents (if any)
+----------------------------------------------------------------
+MANDATORY OUTPUT STRUCTURE (STRICT ORDER)
+----------------------------------------------------------------
 
+1. Overall Status  
+   - Use positive banking language such as:
+     "Reviewed Successfully"
+     "Reviewed with Observations"
+   - Do NOT use negative wording like "DISCREPANCIES FOUND"
+
+2. Summary  
+   - 2–3 concise lines summarizing the overall review outcome
+   - Use neutral operational language suitable for bank records
+
+3. LC Validation Summary  
+   - Briefly confirm whether documents presented align with LC requirements
+   - Mention:
+     - Document set completeness
+     - General alignment with LC terms
+     - Any areas noted for attention (without detailed bullets)
+
+4. Detailed Findings  
+   - MUST include a section for EVERY document reviewed
+   - Group findings by document name and type
+   - Always start with a positive confirmation
+   - If no issues exist:
+     - Clearly state that the document has been reviewed and is in order
+     - Use phrases like:
+       "has been reviewed and is in order"
+       "details are consistent with LC terms"
+       "no inconsistencies noted"
+   - If observations exist:
+     - First state what is in order
+     - Then note differences using soft language such as:
+       "a difference is noted"
+       "may require attention"
+       "is noted for reference"
+   - Do NOT use labels like:
+     "Minor Discrepancy"
+     "Major Discrepancy"
+     within document-level findings
+
+5. Missing Documents  
+   - List only documents explicitly required by the LC but not presented
+   - If none are missing, clearly state:
+     "No missing documents noted"
+
+----------------------------------------------------------------
+OUTPUT FORMAT (CRITICAL – STRICT JSON ONLY)
+----------------------------------------------------------------
+
+You MUST return a SINGLE valid JSON object.
+- Do NOT include markdown
+- Do NOT include headings outside JSON
+- Do NOT include explanations or commentary
+- Do NOT wrap the JSON in code blocks
+- The output MUST be directly insertable into MongoDB
+
+----------------------------------------------------------------
+MANDATORY JSON STRUCTURE (EXACT KEYS)
+----------------------------------------------------------------
+
+{
+  "OverallStatus": "<string>",
+  "Summary": [ "<string>", "<string>" ],
+  "LcValidationSummary": [ "<string>", "<string>", "<string>" ],
+  "DetailedFindings": [
+      "Document Name: finding1. finding2.",
+      "Document Name: finding1. finding2.",
+      ...
+  ],
+  "MissingDocuments": [ "<string>" ]
+}
+
+----------------------------------------------------------------
+STYLE & SAFETY RULES (STRICT)
+----------------------------------------------------------------
+- Do NOT mix positive and negative labels within the same document section
+- Do NOT repeat extracted values unless required for clarity
+- Do NOT speculate beyond provided data
+- Maintain a calm, professional trade-finance operations tone
+
+----------------------------------------------------------------
 Here is the extracted data:
 Sample JSON file format: [
   {
@@ -108,7 +182,6 @@ Sample JSON file format: [
 ]
      
 """
-
 class SummarizeLLM:
 
     def __init__(self):
@@ -123,7 +196,6 @@ class SummarizeLLM:
         """
         Safely extract JSON object from LLM output
         """
-
         if not text:
             raise ValueError("LLM returned empty response")
 
@@ -139,8 +211,11 @@ class SummarizeLLM:
         return json.loads(match.group(0))
 
     def extract(self, normalized_doc: dict) -> dict:
+        """
+        Send normalized document data to LLM and get structured JSON output
+        ready for MongoDB storage.
+        """
 
-        
         response = self.client.chat.completions.create(
             model=self.deployment,
             temperature=0,
@@ -156,6 +231,19 @@ class SummarizeLLM:
         print("\n🏦 TRADE FINANCE COMPLIANCE SUMMARY:\n")
         print(raw_output)
 
-        return {
-            "compliance_summary": raw_output
-        }
+        # Parse into dict (safe)
+        parsed_output = self._safe_json_parse(raw_output)
+
+        # Ensure keys exist and are correct types
+        required_keys = [
+            "overallStatus",
+            "summary",
+            "lcValidationSummary",
+            "detailedFindings",
+            "missingDocuments",
+        ]
+        for key in required_keys:
+            if key not in parsed_output:
+                parsed_output[key] = {} if key == "detailedFindings" else []
+
+        return parsed_output

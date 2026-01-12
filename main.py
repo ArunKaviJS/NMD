@@ -13,9 +13,17 @@ from letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
 from email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
 from summarize_llm import SummarizeLLM
 from certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
+from email_pdf_merger_uploader import merge_pdfs_unique_and_upload
+from mongo_trade_finance_store import store_trade_finance_result
 
 
 load_dotenv()
+
+
+bucket_name = "yc-retails-invoice"
+s3_folder = "uploads_trade_finance/"
+local_working_folder = "merged_output/"
+
 
 # Load AWS credentials from env
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
@@ -115,10 +123,13 @@ def main():
     # Step 1: Fetch unread email attachments
     # --------------------------------
     mail_data = fetch_unread_mbd_emirates_attachments()
-
-    attachment_files = mail_data["files"]
+    attachment_files = mail_data.get("files", [])
 
     print(f"📂 Processing {len(attachment_files)} attachment(s)")
+
+    if not attachment_files:
+        print("⚠️ No attachments found. Exiting.")
+        return {}
 
     # --------------------------------
     # Step 2: Initialize classifier
@@ -128,16 +139,15 @@ def main():
     # --------------------------------
     # Step 3: FINAL OUTPUT CONTAINER
     # --------------------------------
-    final_llm_results = []  # 🔑 dynamic container
+    final_llm_results = []
 
     # --------------------------------
-    # Step 4: Process each file
+    # Step 4: Process each attachment
     # --------------------------------
     for file_path in attachment_files:
         print(f"\n📄 Processing file: {file_path}")
 
         normalized_doc = run_textract_local(file_path)
-        print(normalized_doc)
 
         if not normalized_doc:
             print("⚠️ Skipping empty Textract result")
@@ -159,17 +169,13 @@ def main():
 
         elif doc_type == "LETTER_OF_CREDIT":
             extracted_data = LetterOfCreditLLMExtractor().extract(normalized_doc)
-            
+
         elif doc_type == "CERTIFICATE_OF_ORIGIN":
             extracted_data = CertificateOfOriginLLMExtractor().extract(normalized_doc)
-
 
         else:
             print("ℹ️ No extractor configured for this document type")
 
-        # --------------------------------
-        # Step 5: Store output dynamically
-        # --------------------------------
         final_llm_results.append({
             "file_name": os.path.basename(file_path),
             "doc_type": doc_type,
@@ -177,20 +183,60 @@ def main():
         })
 
     # --------------------------------
-    # Step 6: Final Output
+    # Step 5: Summarize (LC vs Docs)
     # --------------------------------
-    print("\n✅ FINAL LLM OUTPUT (ALL FILES)")
-    for result in final_llm_results:
-        print(result)
+    print("\n🧾 Running Trade Finance Summary LLM...")
+    summarized_data = SummarizeLLM().extract(final_llm_results)
 
-    # This variable is what you store in DB / JSON / API
-    return final_llm_results
+    # # Convert summary dict → readable paragraph text for PDF
+    # summary_text = (
+    #     f"Overall Status: {summarized_data.get('overall_status')}\n\n"
+    #     f"Summary:\n{summarized_data.get('summary')}\n\n"
+    #     f"Missing Documents:\n"
+    #     f"{', '.join(summarized_data.get('missing_documents', [])) or 'None'}\n\n"
+    #     f"Detailed Findings:\n"
+    # )
+
+    # for item in summarized_data.get("detailed_findings", []):
+    #     summary_text += f"- {item.get('issue_type')}: {item.get('description')}\n"
+
+    # --------------------------------
+    # Step 6: Merge Email Summary + PDFs → Upload S3
+    # --------------------------------
+    print("\n📦 Creating merged PDF & uploading to S3...")
+
+    merge_result = merge_pdfs_unique_and_upload(
+        attachments=attachment_files,
+        folder_path=local_working_folder,
+        bucket_name=bucket_name,
+        s3_folder=s3_folder,
+        aws_access_key=AWS_ACCESS_KEY,
+        aws_secret_key=AWS_SECRET_KEY,
+        aws_region=REGION
+    )
+
+    print("\n✅ MERGED PDF RESULT")
+    print(merge_result)
+    
+    mongo_id = store_trade_finance_result(
+    extracted_results=summarized_data,
+    object_url=merge_result["object_url"],
+    filename=merge_result["filename"],
+    original_s3_file=merge_result["s3_key"],
+    email_text="Email subject: MBD Emirates"
+)
+    print("✅ Mongo Document ID:", mongo_id)
+
+    # --------------------------------
+    # Step 7: Final return object
+    # --------------------------------
+    return {
+        "documents_extracted": final_llm_results,
+        "summary": summarized_data,
+        "merged_pdf": merge_result
+    }
 
 
-
-finall_results=main()
-
-print('*************************')
-summarized_data = SummarizeLLM().extract(finall_results)
-
-print(summarized_data)
+final_results = main()
+print("\n🎯 FINAL PIPELINE OUTPUT")
+print(final_results)
