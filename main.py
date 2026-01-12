@@ -5,16 +5,16 @@ from typing import Dict, Any
 from trp import Document  # TRP library
 import boto3
 from dotenv import load_dotenv
-from document_type_classifier import DocumentTypeClassifier
-from invoice_llm_extractor import InvoiceLLMExtractor
-from courier_dispatch_advice import CourierDispatchAdviceLLMExtractor
-from airway_bill_llm_extractor import AirWaybillLLMExtractor
-from letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
-from email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
-from summarize_llm import SummarizeLLM
-from certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
-from email_pdf_merger_uploader import merge_pdfs_unique_and_upload
-from mongo_trade_finance_store import store_trade_finance_result
+from agent_and_subagents.document_type_classifier import DocumentTypeClassifier
+from agent_and_subagents.invoice_llm_extractor import InvoiceLLMExtractor
+from agent_and_subagents.courier_dispatch_advice import CourierDispatchAdviceLLMExtractor
+from agent_and_subagents.airway_bill_llm_extractor import AirWaybillLLMExtractor
+from agent_and_subagents.letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
+from email_and_mongo.email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
+from agent_and_subagents.summarize_llm import SummarizeLLM
+from agent_and_subagents.certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
+from email_and_mongo.email_pdf_merger_uploader import merge_pdfs_unique_and_upload
+from email_and_mongo.mongo_trade_finance_store import store_trade_finance_result
 
 
 load_dotenv()
@@ -188,21 +188,6 @@ def main():
     print("\n🧾 Running Trade Finance Summary LLM...")
     summarized_data = SummarizeLLM().extract(final_llm_results)
 
-    # # Convert summary dict → readable paragraph text for PDF
-    # summary_text = (
-    #     f"Overall Status: {summarized_data.get('overall_status')}\n\n"
-    #     f"Summary:\n{summarized_data.get('summary')}\n\n"
-    #     f"Missing Documents:\n"
-    #     f"{', '.join(summarized_data.get('missing_documents', [])) or 'None'}\n\n"
-    #     f"Detailed Findings:\n"
-    # )
-
-    # for item in summarized_data.get("detailed_findings", []):
-    #     summary_text += f"- {item.get('issue_type')}: {item.get('description')}\n"
-
-    # --------------------------------
-    # Step 6: Merge Email Summary + PDFs → Upload S3
-    # --------------------------------
     print("\n📦 Creating merged PDF & uploading to S3...")
 
     merge_result = merge_pdfs_unique_and_upload(
