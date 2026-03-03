@@ -42,9 +42,8 @@ If mismatch → clearly state which document differs and how.
 
 DOCUMENT TABLE STRUCTURE REQUIREMENTS
 
-You MUST create the following four tables EXACTLY with these names:
+You MUST create the following EXACTLY with these names:
 
-Letter of Credits
 Fields:
 lcNumber
 lcIssueDate
@@ -53,8 +52,6 @@ lcAmount
 lastDateOfShipment
 requiredDocuments
 applicantImporter
-Commercial Invoice
-Fields:
 
 invoiceNumber
 invoiceDate
@@ -63,8 +60,7 @@ goodsDescription
 importer
 exporter
 
-Certificate of Origin
-Fields:
+
 
 certificateNumber
 importer
@@ -72,8 +68,7 @@ exporter
 goodsDescription
 countryOfOrigin
 
-Airway Bill
-Fields:
+
 
 awbNumber
 awbDate
@@ -145,60 +140,32 @@ Wrap JSON in code blocks
 The JSON structure MUST follow this format:
 
 {
-"Letter of Credits": {
-"fieldType": "table",
-"items": [
-{
 "lcNumber": "...",
 "lcIssueDate": "...",
 "lcExpiryDate": "...",
 "lcAmount": "...",
 "lastDateOfShipment": "...",
 "requiredDocuments": "...",
-"applicantImporter": "..."
-}
-]
-},
+"applicantImporter": "...",
 
-"Commercial Invoice": {
-"fieldType": "table",
-"items": [
-{
 "invoiceNumber": "...",
 "invoiceDate": "...",
 "invoiceAmount": "...",
-"goodsDescription": "...",
-"importer": "...",
-"exporter": "..."
-}
-]
-},
+"invoiceGoodsDescription": "...",
+"invoiceImporter": "...",
+"invoiceExporter": "...",
 
-"Certificate of Origin": {
-"fieldType": "table",
-"items": [
-{
 "certificateNumber": "...",
-"importer": "...",
-"exporter": "...",
-"goodsDescription": "...",
-"countryOfOrigin": "..."
-}
-]
-},
+"cooImporter": "...",
+"cooExporter": "...",
+"cooGoodsDescription": "...",
+"countryOfOrigin": "...",
 
-"Airway Bill": {
-"fieldType": "table",
-"items": [
-{
 "awbNumber": "...",
 "awbDate": "...",
-"shipper": "...",
-"consignee": "...",
-"shipmentDate": "..."
-}
-]
-},
+"awbShipper": "...",
+"awbConsignee": "...",
+"shipmentDate": "...",
 
 "beneficiaryShipperComparison": "...",
 "applicantConsigneeComparison": "...",
@@ -206,7 +173,6 @@ The JSON structure MUST follow this format:
 "shipmentDateComparison": "...",
 "goodsDescriptionComparison": "..."
 }
-
 
 Return ONLY this JSON structure. No additional text.
 """
