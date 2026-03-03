@@ -34,7 +34,7 @@ class CourierDispatchAdviceLLMExtractor:
 
         return json.loads(match.group(0))
 
-    def extract(self, normalized_doc: dict) -> dict:
+    def extract(self, normalized_doc):
         """
         Extract Courier Dispatch Advice mandatory fields
         """

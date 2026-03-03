@@ -1,9 +1,8 @@
 import os
 import time
 import traceback
-from typing import Dict, Any
-from trp import Document  # TRP library
 import boto3
+from typing import Dict, Any
 from dotenv import load_dotenv
 from agent_and_subagents.document_type_classifier import DocumentTypeClassifier
 from agent_and_subagents.invoice_llm_extractor import InvoiceLLMExtractor
@@ -15,14 +14,19 @@ from agent_and_subagents.summarize_llm import SummarizeLLM
 from agent_and_subagents.certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
 from email_and_mongo.email_pdf_merger_uploader import merge_pdfs_unique_and_upload
 from email_and_mongo.mongo_trade_finance_store import store_trade_finance_result
-
-
+from azure.ai.documentintelligence import DocumentIntelligenceClient
+from azure.core.credentials import AzureKeyCredential
 load_dotenv()
 
 
-bucket_name = "yc-retails-invoice"
-s3_folder = "uploads_trade_finance/"
-local_working_folder = "merged_output/"
+AZURE_ENDPOINT = os.getenv("AZURE_AI_SERVICES_ENDPOINT")
+AZURE_KEY = os.getenv("AZURE_AI_SERVICES_API_KEY")
+
+client = DocumentIntelligenceClient(
+    endpoint=AZURE_ENDPOINT,
+    credential=AzureKeyCredential(AZURE_KEY)
+)
+
 
 
 # Load AWS credentials from env
@@ -38,83 +42,61 @@ textract_client = boto3.client(
     region_name=REGION
 )
 
-# ===============================
-# Normalize Textract JSON
-# ===============================
-
-def normalize_textract_response(textract_output: Dict[str, Any]) -> Dict[str, Any]:
-    print("🔄 Normalizing Textract JSON using TRP (tables + lines)...")
-
-    doc = Document(textract_output)
-    normalized = {
-        "tables": [],
-        "lines": []
-    }
-
-    for page in doc.pages:
-        # ---- TABLE TEXT ----
-        for table in page.tables:
-            for row in table.rows:
-                row_text = " ".join(
-                    cell.text.strip()
-                    for cell in row.cells
-                    if cell.text
-                )
-                if row_text:
-                    normalized["lines"].append(row_text)
-
-        # ---- NON-TABLE LINES ----
-        for line in page.lines:
-            if line.text and line.text.strip():
-                normalized["lines"].append(line.text.strip())
-
-    print(
-        f"✅ Normalization complete: "
-        f"{len(normalized['tables'])} tables, "
-        f"{len(normalized['lines'])} lines"
-    )
-
-    return normalized
 
 
-# ===============================
-# Run Textract on local file
-# ===============================
-def run_textract_local(file_path: str) -> Dict[str, Any]:
+EXPECTED_DOCUMENT_TYPES = {
+    "AIR_WAYBILL": "Air Waybill",
+    "CERTIFICATE_OF_ORIGIN": "Certificate of Origin",
+    "COURIER_DISPATCH_ADVICE": "Courier Dispatch Advice",
+    "LETTER_OF_CREDIT": "Letter of Credit",
+    "INVOICE": "Commercial Invoice"
+}
+
+
+bucket_name = "yc-retails-invoice"
+s3_folder = "uploads_trade_finance/"
+local_working_folder = "merged_output/"
+
+
+
+
+def run_azure_ocr_local(file_path: str) -> str:
     """
-    Run AWS Textract directly on a local file (PDF or image).
-    Returns normalized data + raw textract JSON.
+    Run Azure Document Intelligence (prebuilt-layout)
+    and return FULL TEXT only.
     """
+
     try:
         print(f"📄 Reading local file: {file_path}")
+
         with open(file_path, "rb") as f:
-            file_bytes = f.read()
+            poller = client.begin_analyze_document(
+                model_id="prebuilt-layout",
+                body=f
+            )
 
-        # Call Textract analyze_document (synchronous)
-        print("📄 Calling AWS Textract analyze_document...")
-        response = textract_client.analyze_document(
-            Document={"Bytes": file_bytes},
-            FeatureTypes=["TABLES"]
-        )
+        result = poller.result()
+        raw_content=result.content
+        print('raw_content',raw_content)
+        
+        text_lines = []
 
-        # Normalize
-        normalized_data = normalize_textract_response(response)
+        # Extract text from pages
+        for page in result.pages:
+            for line in page.lines:
+                if line.content.strip():
+                    text_lines.append(line.content.strip())
 
-        page_count = response.get("DocumentMetadata", {}).get("Pages", 0)
-        final_output = {
-            "page_count": page_count,
-            "normalized_data": normalized_data,
-            "raw_textract": response
-        }
+        full_text = "\n".join(text_lines)
 
-        print("✅ Textract local job succeeded")
-        return normalized_data
+        print(f"✅ Azure OCR complete. Extracted {len(text_lines)} lines")
+
+        return full_text
 
     except Exception as e:
-        print(f"❌ Textract error: {e}")
+        print(f"❌ Azure OCR error: {e}")
         traceback.print_exc()
-        return {}
-
+        return ""
 # ===============================
 # Example usage
 # ===============================
@@ -123,7 +105,14 @@ def main():
     # Step 1: Fetch unread email attachments
     # --------------------------------
     mail_data = fetch_unread_mbd_emirates_attachments()
-    attachment_files = mail_data.get("files", [])
+    #attachment_files = mail_data.get("files", [])
+    attachment_files = []
+
+    for email_data in mail_data:
+        files = email_data.get("files", [])
+        attachment_files.extend(files)
+
+    print("Total attachments:", attachment_files)
 
     print(f"📂 Processing {len(attachment_files)} attachment(s)")
 
@@ -144,10 +133,13 @@ def main():
     # --------------------------------
     # Step 4: Process each attachment
     # --------------------------------
+    uploaded_doc_types = set()
+
+
     for file_path in attachment_files:
         print(f"\n📄 Processing file: {file_path}")
 
-        normalized_doc = run_textract_local(file_path)
+        normalized_doc = run_azure_ocr_local(file_path)
 
         if not normalized_doc:
             print("⚠️ Skipping empty Textract result")
@@ -155,6 +147,11 @@ def main():
 
         doc_type = classifier.classify(normalized_doc)
         print("📌 Document Type:", doc_type)
+        
+        
+
+        if doc_type in EXPECTED_DOCUMENT_TYPES:
+            uploaded_doc_types.add(doc_type)
 
         extracted_data = None
 
@@ -181,12 +178,22 @@ def main():
             "doc_type": doc_type,
             "extracted_data": extracted_data
         })
+        
+    missing_documents = [
+    EXPECTED_DOCUMENT_TYPES[doc]
+    for doc in EXPECTED_DOCUMENT_TYPES
+    if doc not in uploaded_doc_types
+    ]
+
 
     # --------------------------------
     # Step 5: Summarize (LC vs Docs)
     # --------------------------------
     print("\n🧾 Running Trade Finance Summary LLM...")
-    summarized_data = SummarizeLLM().extract(final_llm_results)
+    summarized_data = SummarizeLLM().extract({
+            "documents": final_llm_results,
+            "missing_documents": missing_documents
+        })
 
     print("\n📦 Creating merged PDF & uploading to S3...")
 
@@ -208,7 +215,7 @@ def main():
     object_url=merge_result["object_url"],
     filename=merge_result["filename"],
     original_s3_file=merge_result["s3_key"],
-    email_text="Email subject: MBD Emirates"
+    email_text="Email subject: NMD Emirates"
 )
     print("✅ Mongo Document ID:", mongo_id)
 
@@ -222,6 +229,29 @@ def main():
     }
 
 
-final_results = main()
-print("\n🎯 FINAL PIPELINE OUTPUT")
-print(final_results)
+def run_live():
+    print("🚀 Starting LIVE email processing service (poll every 5 seconds)...")
+
+    try:
+        while True:
+            try:
+                print("\n⏳ Checking for new emails...")
+                result = main()
+                print('Final Results',result)
+
+                if not result or not result.get("documents_extracted"):
+                    print("📭 No new attachments found")
+                else:
+                    print("📨 New documents processed successfully")
+
+            except Exception as e:
+                print("❌ Error during pipeline execution")
+                traceback.print_exc()
+
+            time.sleep(5)
+
+    except KeyboardInterrupt:
+        print("\n🛑 Live service stopped by user (Ctrl+C)")
+
+
+run_live()

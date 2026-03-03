@@ -1,0 +1,6 @@
+amazon-textract-response-parser
+boto3
+python-dotenv
+reportlab
+openai
+azure-ai-documentintelligence

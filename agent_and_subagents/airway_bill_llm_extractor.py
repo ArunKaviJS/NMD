@@ -34,45 +34,47 @@ class AirWaybillLLMExtractor:
 
         return json.loads(match.group(0))
 
-    def extract(self, normalized_doc: dict) -> dict:
+    def extract(self, normalized_doc):
         """
         Extract AIR WAYBILL mandatory fields
         """
 
         system_prompt = """
-You are a Trade Finance Air Waybill (AWB) Extraction Engine.
+        You are a Trade Finance Air Waybill (AWB) Extraction Engine.
 
-Document Type: AIR WAYBILL (AWB)
+        Document Type: AIR WAYBILL (AWB)
 
-Purpose:
-- Controls cargo release
-- Used by airlines, banks, and customs
+        Rules:
+        - Extract ONLY information explicitly stated in the document
+        - DO NOT infer, calculate, or assume values
+        - Preserve wording exactly as shown
+        - If a field is not clearly mentioned, return null
+        - Output MUST be valid JSON only
+        - Do NOT add extra fields
+        - Do NOT rename fields
+        - Do NOT explain anything
 
-Extraction Rules:
-- Extract ONLY what is explicitly present
-- Do NOT guess or infer
-- Missing fields must be null
-- Output MUST be valid JSON only
-- No explanations
+        Field Mapping Rules:
+        - AWB Number must be the 11-digit Air Waybill number (e.g., 176-XXXXXXXX or 176 XXXXXXXX)
+        - AWB Date = Execution date / Issued date (NOT flight date unless explicitly stated as AWB date)
+        - Shipment Date = Flight Date / Date of Departure
+        - Beneficiary = Shipper (if no separate beneficiary mentioned)
+        - Applicant/Consignee = Consignee
+        - If multiple shipment dates appear, extract only the main flight date
+        - Goods Description must be taken from “Nature and Quantity of Goods” or similar section
 
-Required JSON Schema:
-{
-  "awb_number": null,
-  "awb_type": null,
-  "shipper_name": null,
-  "shipper_address": null,
-  "consignee_name": null,
-  "consignee_address": null,
-  "airport_of_origin": null,
-  "airport_of_destination": null,
-  "flight_number": null,
-  "flight_date": null,
-  "goods_description": null,
-  "number_of_packages": null,
-  "gross_weight": null,
-  "freight_terms": null,
-  "carrier_or_courier_stamp_present": null
-}
+        Required JSON Schema:
+
+        {
+        "awb_number": null,
+        "awb_date": null,
+        "shipper": null,
+        "consignee": null,
+        "shipment_date": null,
+        "beneficiary": null,
+        "applicant_consignee": null,
+        "goods_description": null
+        }
 """
 
         response = self.client.chat.completions.create(

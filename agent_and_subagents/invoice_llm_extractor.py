@@ -33,7 +33,7 @@ class InvoiceLLMExtractor:
 
         return json.loads(match.group(0))
 
-    def extract(self, normalized_doc: dict) -> dict:
+    def extract(self, normalized_doc):
 
         system_prompt = """
 You are a Trade Finance Invoice Extraction Engine.
@@ -41,35 +41,35 @@ You are a Trade Finance Invoice Extraction Engine.
 Document Type: COMMERCIAL INVOICE or PROFORMA INVOICE
 
 Rules:
-- Extract values ONLY if explicitly present
-- DO NOT guess
+- Extract values ONLY if explicitly present in the document
+- DO NOT guess or infer
 - DO NOT explain
-- Missing fields must be null
+- If a field is not clearly mentioned, return null
 - Output MUST be valid JSON only
+- Do NOT add extra fields
+- Do NOT rename fields
+
+Field Mapping Rules:
+- Exporter = Seller / Shipper (if explicitly mentioned)
+- Importer = Buyer
+- Beneficiary = Exporter (if no separate beneficiary mentioned)
+- Applicant/Consignee = Consignee
+- Shipper Match = "Yes" if Exporter name exactly matches Shipper name, otherwise "No"
+- Goods Description Rule → Description + Quantity (if quantity is mentioned in the document)
 
 Required JSON Schema:
+
 {
-  "invoice_type": null,
   "invoice_number": null,
   "invoice_date": null,
-  "seller_name": null,
-  "seller_address": null,
-  "buyer_name": null,
-  "buyer_address": null,
-  "goods_description": null,
-  "hs_code": null,
-  "quantity": null,
-  "unit_price": null,
-  "total_amount": null,
+  "invoice_amount": null,
   "currency": null,
-  "incoterms": null,
-  "port_of_loading": null,
-  "port_of_discharge": null,
-  "country_of_origin": null,
-  "payment_terms": null
-}
-"""
-
+  "goods_description": null,
+  "importer": null,
+  "exporter": null,
+  "beneficiary": null,
+  "applicant_consignee": null
+}"""
         response = self.client.chat.completions.create(
             model=self.deployment,
             temperature=0,

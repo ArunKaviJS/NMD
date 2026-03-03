@@ -83,7 +83,7 @@ def store_trade_finance_result(
         "_id": ObjectId(),
 
         # 🔐 System metadata
-        "clusterId": ObjectId("6964a25d9576df2e993331b5"),
+        "clusterId": ObjectId("69a67166d128d114aeab0e7a"),
         "userId": ObjectId("6964a0a09576df2e9933315d"),
         "status": "1",
         "processingStatus": "Completed",
@@ -105,5 +105,6 @@ def store_trade_finance_result(
     }
 
     collection.insert_one(document)
-
+    print('_id',str(document["_id"]))
+    
     return str(document["_id"])

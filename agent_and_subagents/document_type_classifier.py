@@ -11,7 +11,7 @@ class DocumentTypeClassifier:
     Classifies Trade Finance documents into one of:
     - INVOICE
     - AIR_WAYBILL
-    - COURIER_DISPATCH_ADVICE
+
     - LETTER_OF_CREDIT
     - CERTIFICATE_OF_ORIGIN
     """
@@ -19,7 +19,6 @@ class DocumentTypeClassifier:
     ALLOWED_TYPES = [
         "INVOICE",
         "AIR_WAYBILL",
-        "COURIER_DISPATCH_ADVICE",
         "LETTER_OF_CREDIT",
         "CERTIFICATE_OF_ORIGIN",
     ]
@@ -36,7 +35,7 @@ class DocumentTypeClassifier:
         if not self.deployment:
             raise ValueError("AZURE_OPENAI_DEPLOYMENT is not set")
 
-    def classify(self, document: dict) -> str:
+    def classify(self, document):
         """
         document format:
         {
@@ -45,14 +44,14 @@ class DocumentTypeClassifier:
         }
 
         returns:
-        INVOICE | AIR_WAYBILL | COURIER_DISPATCH_ADVICE |
+        INVOICE | AIR_WAYBILL |
         LETTER_OF_CREDIT | CERTIFICATE_OF_ORIGIN
         """
 
         system_prompt = (
             "You are a Trade Finance document classifier used by a bank.\n\n"
             "Classify the document into EXACTLY ONE of:\n"
-            "INVOICE, AIR_WAYBILL, COURIER_DISPATCH_ADVICE, "
+            "INVOICE, AIR_WAYBILL "
             "LETTER_OF_CREDIT, CERTIFICATE_OF_ORIGIN.\n\n"
 
             "STRICT IDENTIFICATION RULES:\n\n"
@@ -71,11 +70,6 @@ class DocumentTypeClassifier:
             "- Contains flight number and airport routing\n"
             "- Serves as a transport contract\n\n"
 
-            "3. COURIER_DISPATCH_ADVICE:\n"
-            "- Issued by courier or express companies\n"
-            "- Mentions courier, express, pickup, delivery\n"
-            "- Contains HAWB or courier tracking number\n"
-            "- Used for document or parcel dispatch\n\n"
 
             "4. INVOICE:\n"
             "- Contains pricing, total amount, currency\n"

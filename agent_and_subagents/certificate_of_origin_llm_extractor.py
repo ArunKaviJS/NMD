@@ -36,71 +36,44 @@ class CertificateOfOriginLLMExtractor:
 
         return json.loads(match.group(0))
 
-    def extract(self, normalized_doc: dict) -> dict:
+    def extract(self, normalized_doc):
         """
         Extract CERTIFICATE OF ORIGIN fields
         """
 
         system_prompt = """
-You are a Trade Finance Document Extraction Engine.
+        You are a Trade Finance Document Extraction Engine.
 
-Document Type: CERTIFICATE OF ORIGIN
+        Document Type: CERTIFICATE OF ORIGIN
 
-Extraction Rules:
-- Extract ONLY information explicitly stated in the document
-- DO NOT infer or assume values
-- Preserve original wording as it appears
-- If a field is not present, set it to null
-- Output MUST be valid JSON only
-- No explanations, summaries, or commentary
+        Rules:
+        - Extract ONLY information explicitly stated in the document
+        - DO NOT infer, calculate, or assume values
+        - Preserve original wording exactly as it appears
+        - If a field is not clearly present, return null
+        - Output MUST be valid JSON only
+        - Do NOT add extra fields
+        - Do NOT rename fields
+        - Do NOT explain anything
 
-Required JSON Schema:
-{
-  "certificate_type": null,
-  "certificate_number": null,
-  "issuing_authority": null,
-  "place_of_issue": null,
-  "date_of_issue": null,
+        Field Mapping Rules:
+        - Importer = Consignee
+        - Beneficiary = Exporter (if no separate beneficiary mentioned)
+        - Shipper = Exporter (if no separate shipper mentioned)
+        - Country of Origin must be explicitly stated (e.g., “People's Republic of China”)
+        - Certificate Number must appear explicitly as Certificate No / Certificate Number (Invoice or LC number must NOT be used as certificate number)
 
-  "exporter_name": null,
-  "exporter_address": null,
+        Required JSON Schema:
 
-  "consignee_name": null,
-  "consignee_address": null,
-
-  "buyer_name": null,
-  "buyer_address": null,
-
-  "country_of_origin": null,
-  "country_of_destination": null,
-
-  "method_of_dispatch": null,
-  "type_of_shipment": null,
-
-  "vessel_or_aircraft": null,
-  "voyage_or_flight_number": null,
-
-  "port_of_loading": null,
-  "port_of_discharge": null,
-  "final_destination": null,
-  "date_of_departure": null,
-
-  "goods_description": null,
-  "hs_code": null,
-  "number_of_packages": null,
-  "package_type": null,
-  "gross_weight": null,
-
-  "invoice_number": null,
-  "invoice_date": null,
-  "lc_number": null,
-
-  "chamber_declaration_present": false,
-  "exporter_declaration_present": false,
-
-  "authorized_signatory_name": null,
-  "signatory_company": null
-}
+        {
+        "certificate_number": null,
+        "importer": null,
+        "exporter": null,
+        "goods_description": null,
+        "country_of_origin": null,
+        "beneficiary": null,
+        "shipper": null
+        }
 """
 
         response = self.client.chat.completions.create(

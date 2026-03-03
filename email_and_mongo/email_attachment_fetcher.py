@@ -7,19 +7,6 @@ from datetime import datetime
 
 
 def fetch_unread_mbd_emirates_attachments():
-    """
-    Fetch attachments from the latest UNREAD email
-    whose subject contains 'MBD emirates' (case-insensitive).
-
-    Downloads files into a unique folder.
-
-    Returns:
-        {
-            "folder_path": str,
-            "files": [file_path1, file_path2, ...]
-        }
-    """
-
     IMAP_SERVER = os.getenv("IMAP_SERVER")
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_PASS = os.getenv("EMAIL_PASS")
@@ -32,14 +19,14 @@ def fetch_unread_mbd_emirates_attachments():
     mail.login(EMAIL_USER, EMAIL_PASS)
     mail.select("inbox")
 
-    # Search only UNSEEN emails
-    status, messages = mail.search(None, '(UNSEEN)')
+    status, messages = mail.search(None, 'UNSEEN')
     email_ids = messages[0].split()
 
     if not email_ids:
         raise Exception("No unread emails found")
 
-    # Process newest first
+    all_results = []
+
     for email_id in reversed(email_ids):
         status, msg_data = mail.fetch(email_id, "(RFC822)")
         msg = email.message_from_bytes(msg_data[0][1])
@@ -54,12 +41,11 @@ def fetch_unread_mbd_emirates_attachments():
 
         print(f"🔍 Checking subject: {subject}")
 
-        if "mbd emirates" not in subject.lower():
+        if "nmd emirates" not in subject.lower():
             continue
 
         print(f"✅ Matched unread email: {subject}")
 
-        # Create unique folder
         unique_folder = f"mail_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         os.makedirs(unique_folder, exist_ok=True)
 
@@ -84,18 +70,21 @@ def fetch_unread_mbd_emirates_attachments():
                 saved_files.append(file_path)
                 print(f"📎 Saved attachment: {file_path}")
 
-        if not saved_files:
-            raise Exception("Unread matched email found but no attachments")
+        if saved_files:
+            all_results.append({
+                "email_subject": subject,
+                "folder_path": unique_folder,
+                "files": saved_files
+            })
 
-        # Mark email as SEEN
-        mail.store(email_id, '+FLAGS', '\\Seen')
+            # Mark email as SEEN only after successful processing
+            mail.store(email_id, '+FLAGS', '\\Seen')
 
-        return {
-            "folder_path": unique_folder,
-            "files": saved_files
-        }
+    if not all_results:
+        raise Exception("No unread emails found with subject 'NMD emirates' and attachments")
 
-    raise Exception("No unread email found with subject 'MBD emirates'")
+    return all_results
+
 
 
 # ===============================

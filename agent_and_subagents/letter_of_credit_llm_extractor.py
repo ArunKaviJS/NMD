@@ -34,54 +34,54 @@ class LetterOfCreditLLMExtractor:
 
         return json.loads(match.group(0))
 
-    def extract(self, normalized_doc: dict) -> dict:
+    def extract(self, normalized_doc):
         """
         Extract LETTER OF CREDIT mandatory fields
         """
 
         system_prompt = """
-You are a Trade Finance Letter of Credit (LC) Extraction Engine.
+        You are a Trade Finance Letter of Credit (LC) Extraction Engine.
 
-Document Type: LETTER OF CREDIT
+        Document Type: LETTER OF CREDIT
 
-Rules:
-- Extract ONLY what is explicitly stated
-- NO assumptions or interpretation
-- Preserve original wording (bank-grade)
-- Missing fields must be null
-- Output MUST be valid JSON only
-- No explanations or commentary
+        Rules:
+        - Extract ONLY information explicitly stated in the document
+        - DO NOT infer, interpret, calculate, or assume
+        - Preserve original wording exactly as written
+        - If a field is not clearly mentioned, return null
+        - Output MUST be valid JSON only
+        - Do NOT add extra fields
+        - Do NOT rename fields
+        - Do NOT explain anything
 
-Required JSON Schema:
-{
-  "lc_number": null,
-  "date_of_issue": null,
-  "issuing_bank": null,
-  "advising_bank": null,
-  "applicant_name": null,
-  "applicant_address": null,
-  "beneficiary_name": null,
-  "beneficiary_address": null,
-  "currency": null,
-  "lc_amount": null,
-  "tolerance": null,
-  "incoterms": null,
-  "port_of_loading": null,
-  "port_of_discharge": null,
-  "latest_shipment_date": null,
-  "documents_required": {
-    "commercial_invoice": false,
-    "packing_list": false,
-    "air_waybill": false,
-    "certificate_of_origin": false,
-    "special_certificates": []
-  },
-  "payment_terms": null,
-  "availability": null,
-  "lc_expiry_date": null,
-  "place_of_expiry": null
-}
-"""
+        Field Mapping Rules:
+        - Applicant/Importer = Applicant
+        - Applicant/Consignee = Applicant (if Consignee not separately mentioned)
+        - Beneficiary = Beneficiary
+        - Shipper = Beneficiary (if Shipper not separately mentioned in LC)
+        - LC Amount = Amount stated under “AMOUNT” or “NOT EXCEEDING”
+        - Amount = Same value as LC Amount
+        - Last Date of Shipment = Same as Shipment Date, “NOT LATER THAN” date under Shipment Terms
+        - Required Documents must be extracted exactly as listed under “DOCUMENTS REQUIRED”
+        - Goods Description must be taken exactly from the “Goods:” section
+
+        Required JSON Schema:
+
+        {
+        "lc_number": null,
+        "lc_issue_date": null,
+        "lc_expiry_date": null,
+        "lc_amount": null,
+        "last_date_of_shipment": null,
+        "required_documents": null,
+        "applicant_importer": null,
+        "beneficiary": null,
+        "shipper": null,
+        "applicant_consignee": null,
+        "amount": null,
+        "goods_description": null
+        }
+        """
 
         response = self.client.chat.completions.create(
             model=self.deployment,
