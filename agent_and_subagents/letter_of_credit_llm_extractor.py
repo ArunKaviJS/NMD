@@ -63,6 +63,8 @@ class LetterOfCreditLLMExtractor:
         - Amount = Same value as LC Amount
         - Last Date of Shipment = Same as Shipment Date, “NOT LATER THAN” date under Shipment Terms
         - Required Documents must be extracted exactly as listed under “DOCUMENTS REQUIRED”
+          - Remove descriptive clauses.
+          - Return only the exact document name.
         - Goods Description must be taken exactly from the “Goods:” section
 
         Required JSON Schema:
