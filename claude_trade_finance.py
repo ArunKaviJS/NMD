@@ -2,6 +2,8 @@ import os
 import time
 import traceback
 import boto3
+import json
+import base64
 from typing import Dict, Any
 from dotenv import load_dotenv
 from agent_and_subagents.document_type_classifier import DocumentTypeClassifier
@@ -34,22 +36,25 @@ AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
 REGION = os.getenv("REGION", "ap-south-1")
 
-# Initialize Textract client
-textract_client = boto3.client(
-    "textract",
+
+# Initialize Bedrock client for Claude Sonnet OCR
+bedrock_client = boto3.client(
+    "bedrock-runtime",
+    region_name=REGION,
     aws_access_key_id=AWS_ACCESS_KEY,
-    aws_secret_access_key=AWS_SECRET_KEY,
-    region_name=REGION
+    aws_secret_access_key=AWS_SECRET_KEY
 )
 
 
-
 EXPECTED_DOCUMENT_TYPES = {
-    "AIR_WAYBILL": "Air Waybill",
-    "CERTIFICATE_OF_ORIGIN": "Certificate of Origin",
-    "COURIER_DISPATCH_ADVICE": "Courier Dispatch Advice",
-    "LETTER_OF_CREDIT": "Letter of Credit",
-    "INVOICE": "Commercial Invoice"
+    "BILL_OF_EXCHANGE":       "Bill of Exchange",
+    "BILL_OF_LADING":         "Bill of Lading",
+    "CERTIFICATE_OF_ORIGIN":  "Certificate of Origin",
+    "INVOICE":                "Commercial Invoice",
+    "INSPECTION_CERTIFICATE": "Inspection Certificate",
+    "INSURANCE_CERTIFICATE":  "Insurance Certificate",
+    "LETTER_OF_CREDIT":       "Letter of Credit",
+    "PACKING_LIST":           "Packing List",
 }
 
 
@@ -58,46 +63,100 @@ s3_folder = "uploads_trade_finance/"
 local_working_folder = "merged_output/"
 
 
-
-
 def run_azure_ocr_local(file_path: str) -> str:
     """
-    Run Azure Document Intelligence (prebuilt-layout)
-    and return FULL TEXT only.
+    Run OCR using Claude Sonnet via AWS Bedrock.
+    Sends the PDF/image as base64 and extracts full text content.
     """
-
     try:
         print(f"📄 Reading local file: {file_path}")
 
+        # Read and encode file as base64
         with open(file_path, "rb") as f:
-            poller = client.begin_analyze_document(
-                model_id="prebuilt-layout",
-                body=f
-            )
+            file_bytes = f.read()
 
-        result = poller.result()
-        raw_content=result.content
-        print('raw_content',raw_content)
-        
-        # text_lines = []
+        base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
 
-        # # Extract text from pages
-        # for page in result.pages:
-        #     for line in page.lines:
-        #         if line.content.strip():
-        #             text_lines.append(line.content.strip())
+        # Determine media type based on file extension
+        ext = os.path.splitext(file_path)[1].lower()
+        media_type_map = {
+            ".pdf": "application/pdf",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".tiff": "image/tiff",
+            ".tif": "image/tiff",
+            ".webp": "image/webp",
+        }
+        media_type = media_type_map.get(ext, "application/pdf")
 
-        # full_text = "\n".join(text_lines)
+        # Build the source block based on media type
+        if media_type == "application/pdf":
+            source_block = {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64_data
+            }
+            content_block = {
+                "type": "document",
+                "source": source_block
+            }
+        else:
+            source_block = {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64_data
+            }
+            content_block = {
+                "type": "image",
+                "source": source_block
+            }
 
-        print(f"✅ Azure OCR complete. Extracted {len(raw_content)} lines")
+        payload = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 8096,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        content_block,
+                        {
+                            "type": "text",
+                            "text": (
+                                "You are a document OCR engine. "
+                                "Extract and return ALL text content from this document exactly as it appears. "
+                                "Preserve the layout, tables, labels, values, line breaks, and structure as closely as possible. "
+                                "Do not summarize, interpret, or omit any content. "
+                                "Output only the raw extracted text with no additional commentary."
+                            )
+                        }
+                    ]
+                }
+            ]
+        }
+
+        print(f"🤖 Sending to Claude Sonnet via Bedrock...")
+
+        response = bedrock_client.invoke_model(
+            modelId="global.anthropic.claude-sonnet-4-6",
+            body=json.dumps(payload),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        result = json.loads(response["body"].read())
+        raw_content = result["content"][0]["text"]
+
+        print(f"✅ Claude OCR complete. Extracted {len(raw_content)} characters")
+        print("raw_content", raw_content)
 
         return raw_content
 
     except Exception as e:
-        print(f"❌ Azure OCR error: {e}")
+        print(f"❌ Claude Bedrock OCR error: {e}")
         traceback.print_exc()
         return ""
-# ===============================
+#============
 # Example usage
 # ===============================
 def main():
@@ -134,6 +193,11 @@ def main():
     # Step 4: Process each attachment
     # --------------------------------
     uploaded_doc_types = set()
+    
+    # --------------------------------
+    # Step 5: collect unrecognised file names here
+    # --------------------------------
+    unexpected_files = []   
 
 
     for file_path in attachment_files:
@@ -145,7 +209,14 @@ def main():
             print("⚠️ Skipping empty Textract result")
             continue
 
-        doc_type = classifier.classify(normalized_doc)
+         # Classify — catch anything the classifier doesn't recognise
+        try:
+            doc_type = classifier.classify(normalized_doc)
+        except ValueError as e:
+            file_name = os.path.basename(file_path)
+            print(f"⚠️ Unclassified document skipped: {file_name} — {e}")
+            unexpected_files.append(file_name)
+            continue  # skip extraction entirely for this file
         print("📌 Document Type:", doc_type)
         
         
@@ -158,17 +229,26 @@ def main():
         if doc_type == "INVOICE":
             extracted_data = InvoiceLLMExtractor().extract(normalized_doc)
 
-        elif doc_type == "COURIER_DISPATCH_ADVICE":
-            extracted_data = CourierDispatchAdviceLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "AIR_WAYBILL":
-            extracted_data = AirWaybillLLMExtractor().extract(normalized_doc)
-
         elif doc_type == "LETTER_OF_CREDIT":
             extracted_data = LetterOfCreditLLMExtractor().extract(normalized_doc)
 
         elif doc_type == "CERTIFICATE_OF_ORIGIN":
             extracted_data = CertificateOfOriginLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "BILL_OF_EXCHANGE":
+            extracted_data = BillOfExchangeLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "BILL_OF_LADING":
+            extracted_data = BillOfLadingLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "INSPECTION_CERTIFICATE":
+            extracted_data = InspectionCertificateLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "INSURANCE_CERTIFICATE":
+            extracted_data = InsuranceCertificateLLMExtractor().extract(normalized_doc)
+
+        elif doc_type == "PACKING_LIST":
+            extracted_data = PackingListLLMExtractor().extract(normalized_doc)
 
         else:
             print("ℹ️ No extractor configured for this document type")

@@ -36,40 +36,61 @@ class InvoiceLLMExtractor:
     def extract(self, normalized_doc):
 
         system_prompt = """
-You are a Trade Finance Invoice Extraction Engine.
+        You are a Trade Finance Commercial Invoice Extraction Engine.
 
-Document Type: COMMERCIAL INVOICE or PROFORMA INVOICE
+        Document Type: COMMERCIAL INVOICE or PROFORMA INVOICE
 
-Rules:
-- Extract values ONLY if explicitly present in the document
-- DO NOT guess or infer
-- DO NOT explain
-- If a field is not clearly mentioned, return null
-- Output MUST be valid JSON only
-- Do NOT add extra fields
-- Do NOT rename fields
+        Rules:
+        - Extract values ONLY if explicitly present in the document
+        - DO NOT guess or infer
+        - DO NOT explain or add commentary
+        - If a field is not clearly mentioned, return null
+        - Output MUST be valid JSON only — no markdown, no extra text
+        - Do NOT add extra fields
+        - Do NOT rename fields
 
-Field Mapping Rules:
-- Exporter = Seller / Shipper (if explicitly mentioned)
-- Importer = Buyer
-- Beneficiary = Exporter (if no separate beneficiary mentioned)
-- Applicant/Consignee = Consignee
-- Shipper Match = "Yes" if Exporter name exactly matches Shipper name, otherwise "No"
-- Goods Description Rule → Description + Quantity (if quantity is mentioned in the document)
+        Field Mapping Rules:
+        - Exporter = Seller / Shipper (include full name + address as one string)
+        - Importer = Buyer / Consignee (include full name + address as one string)
+        - lc_number = any L/C No or LC reference mentioned in the document
+        - goods_description = full commodity description as written in the document
+        - hs_code = Harmonized System / HS Code of the goods
+        - quantity = number of packages/bags/units with unit type (e.g. "5,000 Bags / 125 MT")
+        - unit_price = price per unit with basis (e.g. "USD 24.00 per bag")
+        - total_fob = FOB subtotal value
+        - freight = ocean/air freight charges added
+        - insurance = marine/air insurance premium added
+        - total_cif = final CIF / CFR / C&F total value
+        - incoterm = trade term used (e.g. CIF, FOB, CFR)
+        - port_of_loading = port where goods are loaded
+        - port_of_discharge = destination port
+        - vessel_voyage = vessel name and/or voyage number
+        - bank_details = full bank name, branch, account number, IFSC, SWIFT, correspondent bank
 
-Required JSON Schema:
+        Required JSON Schema:
 
-{
-  "invoice_number": null,
-  "invoice_date": null,
-  "invoice_amount": null,
-  "currency": null,
-  "goods_description": null,
-  "importer": null,
-  "exporter": null,
-  "beneficiary": null,
-  "applicant_consignee": null
-}"""
+        {
+        "exporter": null,
+        "importer_consignee": null,
+        "invoice_number": null,
+        "invoice_date": null,
+        "lc_number": null,
+        "goods_description": null,
+        "hs_code": null,
+        "quantity": null,
+        "unit_price": null,
+        "total_fob": null,
+        "freight": null,
+        "insurance": null,
+        "total_cif": null,
+        "currency": null,
+        "incoterm": null,
+        "port_of_loading": null,
+        "port_of_discharge": null,
+        "vessel_voyage": null,
+        "bank_details": null
+        }"""
+        
         response = self.client.chat.completions.create(
             model=self.deployment,
             temperature=0,

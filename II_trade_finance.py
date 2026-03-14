@@ -6,7 +6,7 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 from agent_and_subagents.document_type_classifier import DocumentTypeClassifier
 from agent_and_subagents.invoice_llm_extractor import InvoiceLLMExtractor
-from agent_and_subagents.airway_bill_llm_extractor import AirWaybillLLMExtractor
+from agent_and_subagents.Billoflading import AirWaybillLLMExtractor
 from agent_and_subagents.letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
 from email_and_mongo.email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
 from agent_and_subagents.summarize_llm import SummarizeLLM
