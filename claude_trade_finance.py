@@ -8,26 +8,19 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 from agent_and_subagents.document_type_classifier import DocumentTypeClassifier
 from agent_and_subagents.invoice_llm_extractor import InvoiceLLMExtractor
-from agent_and_subagents.BillOfExchangeLLMExtractor import CourierDispatchAdviceLLMExtractor
-from agent_and_subagents.Billoflading import AirWaybillLLMExtractor
+from agent_and_subagents.BillOfExchangeLLMExtractor import BillOfExchangeLLMExtractor
+from agent_and_subagents.Billoflading import BillOfLadingLLMExtractor
+from agent_and_subagents.PackingListllmextractor import PackingListLLMExtractor
+from agent_and_subagents.inspection_certificate import InspectionCertificateLLMExtractor
+from agent_and_subagents.InsuranceCertificateLLMExtractor import InsuranceCertificateLLMExtractor
 from agent_and_subagents.letter_of_credit_llm_extractor import LetterOfCreditLLMExtractor
-from email_and_mongo.email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
 from agent_and_subagents.summarize_llm import SummarizeLLM
 from agent_and_subagents.certificate_of_origin_llm_extractor import CertificateOfOriginLLMExtractor
 from email_and_mongo.email_pdf_merger_uploader import merge_pdfs_unique_and_upload
 from email_and_mongo.mongo_trade_finance_store import store_trade_finance_result
-from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.core.credentials import AzureKeyCredential
+from email_and_mongo.email_attachment_fetcher import fetch_unread_mbd_emirates_attachments
 load_dotenv()
 
-
-AZURE_ENDPOINT = os.getenv("AZURE_AI_SERVICES_ENDPOINT")
-AZURE_KEY = os.getenv("AZURE_AI_SERVICES_API_KEY")
-
-client = DocumentIntelligenceClient(
-    endpoint=AZURE_ENDPOINT,
-    credential=AzureKeyCredential(AZURE_KEY)
-)
 
 
 
