@@ -32,6 +32,76 @@ Identity/consistency checks  → "MATCH" | "MISMATCH"
 Arithmetic/date/logic checks → "PASS"  | "FAIL"
 Document missing             → "UNABLE TO CHECK — document missing"
 
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL STATUS DERIVATION RULE — READ THIS FIRST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For EVERY check, you MUST follow this exact process in order:
+
+STEP 1 — Collect the actual values from each document being compared.
+STEP 2 — Compare them literally and precisely:
+          - For identity/consistency checks: are ALL values exactly the same?
+            Even ONE document with a different value = MISMATCH. No exceptions.
+          - For arithmetic checks: does the calculation result match the stated value?
+            Any difference = FAIL.
+          - For date sequence checks: does the date ordering rule hold?
+            Any violation = FAIL.
+STEP 3 — Write the _detail string FIRST, filling in ALL actual values found.
+STEP 4 — Derive the _status DIRECTLY from what you wrote in _detail:
+          - If your detail says any document differs from others → status MUST be "MISMATCH"
+          - If your detail says any arithmetic is wrong → status MUST be "FAIL"
+          - If your detail says any date sequence is violated → status MUST be "FAIL"
+          - If your detail says any document is missing → status MUST be "UNABLE TO CHECK — document missing"
+          - ONLY if every value compared is identical / every check passes → status is "MATCH" or "PASS"
+
+FORBIDDEN: status = "MATCH" or "PASS" when the detail text mentions any difference,
+           discrepancy, deviation, mismatch, differs, incorrect, or does not equal.
+           If your detail contradicts your status — fix the STATUS, not the detail.
+           The detail is the evidence. The status must follow the evidence.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SPELLING & NAME EXACTNESS RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For ALL identity checks (exporter name, importer/consignee name):
+- Compare names CHARACTER BY CHARACTER — not by meaning or intent
+- ANY of the following counts as MISMATCH, no exceptions:
+    • Extra or missing letter        : "Coffee" vs "Coffees"
+    • Abbreviation vs full form      : "Ltd" vs "Limited", "Pvt" vs "Private"
+    • Singular vs plural             : "Export" vs "Exports", "Coffee" vs "Coffees"
+    • Punctuation difference         : "Pvt. Ltd." vs "Pvt Ltd"
+    • Extra or missing word          : "ABC Trading" vs "ABC Trading LLC"
+    • Case difference                : "PVT LTD" vs "Pvt Ltd"
+    • Spacing difference             : "ABCTrade" vs "ABC Trade"
+    • Ampersand vs and               : "Exports & Co" vs "Exports and Co"
+- Do NOT assume two names are the same because they sound alike or refer to the same entity
+- Do NOT normalize names before comparing
+- If in doubt → flag as MISMATCH with severity MINOR and note the exact difference
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ARITHMETIC CALCULATION RULE — MANDATORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For ALL arithmetic checks you MUST:
+
+STEP 1 — Extract the raw numeric values (strip currency symbols, commas, spaces)
+          e.g. "USD 3.20" → 3.20 | "48,000 kg" → 48000 | "USD 1,53,600.00" → 153600.00
+
+STEP 2 — Perform the calculation yourself using those raw numbers
+          e.g. 3.20 × 48000 = 153600.00
+
+STEP 3 — Extract the stated value from the document (strip symbols/commas)
+          e.g. Invoice FOB stated = "USD 1,44,000.00" → 144000.00
+
+STEP 4 — Compare your calculated result vs the stated value EXACTLY
+          153600.00 ≠ 144000.00 → FAIL
+          Only if calculated == stated (difference = 0.00) → PASS
+
+STEP 5 — Write the detail showing all 4 steps explicitly
+STEP 6 — Set status based purely on Step 4 result
+
+FORBIDDEN: Writing "Arithmetic correct" or status PASS without
+           verifying calculated result == stated value in Step 4.
+           If you did not calculate, you cannot say PASS.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXACT OUTPUT STRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -63,8 +133,8 @@ EXACT OUTPUT STRUCTURE
 
   "invoice_number": "...",
   "invoice_date": "...",
-  "invoice_exporter": "...",
-  "invoice_importer": "...",
+  "invoice_exporter_name_address": "...",
+  "invoice_importer_name_address": "...",
   "invoice_lc_reference": "...",
   "invoice_goods_description": "...",
   "invoice_hs_code": "...",
@@ -79,6 +149,7 @@ EXACT OUTPUT STRUCTURE
   "invoice_port_of_loading": "...",
   "invoice_port_of_discharge": "...",
   "invoice_vessel": "...",
+  "invoice_BANK_DETAILS":"...",
 
   "bl_number": "...",
   "bl_date_of_issue": "...",
@@ -168,174 +239,135 @@ EXACT OUTPUT STRUCTURE
   "pl_vessel": "...",
   "pl_port_of_loading": "...",
   "pl_port_of_discharge": "...",
+  "pl_MARKS_&_NUMBERS":"....."
 
-  "exporter_name_consistency_name": "exporter_name_consistency",
-  "exporter_name_documents": "Invoice, Packing List, B/L, COO, Insurance, Inspection, BOE",
-  "exporter_name_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "exporter_name_severity": "CRITICAL | MAJOR | MINOR | null",
-  "check_01_detail": "...",
 
-  "importer_consignee_consistency_name": "importer_consignee_consistency",
-  "importer_consignee_documents": "Invoice, B/L, COO, Insurance, Inspection",
-  "importer_consignee_status": "...",
-  "importer_consignee_severity": "...",
-  "check_02_detail": "...",
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CROSS-CHECKS OUTPUT FIELDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   # ── IDENTITY CHECKS ──────────────────────────────────────────
 
-  "lc_amount_vs_invoice_cif_name": "lc_amount_vs_invoice_cif",
-  "documents_for_lc_amount_vs_invoice_cif": "LC, Invoice",
+   "exporter_name_match": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "exporter_name_detail": "Compare Invoice exporter, Packing List exporter, B/L shipper, COO exporter, Insurance insured, Inspection client, BOE drawer. Copy the EXACT character-by-character spelling from each document — do not normalize, abbreviate, or assume equivalence. List each document and its exact value as written. If ALL are character-for-character identical → 'All 7 documents show the same exporter name: [name].' If ANY differ by even one character, letter, punctuation mark, or word (including plural vs singular, Ltd vs Limited, Pvt vs Private, spacing differences, abbreviated vs full form) → name every differing document and its exact value.",
+  "exporter_name_discrepancy": "If MATCH: 'All 7 documents show identical exporter name: [exact name].' If MISMATCH: list every document that differs — 'Invoice shows [exact value], B/L shows [exact value], COO shows [exact value]' etc. Even a single extra letter, plural form, or punctuation difference counts as MISMATCH — e.g. Coffee vs Coffees, Ltd vs Limited, Pvt Ltd vs Private Limited are all MISMATCHES.",
+  "exporter_name_severity": "MAJOR | MINOR | null",
+
+  "importer_consignee_match": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "importer_consignee_detail": "Compare Invoice importer, B/L consignee, COO consignee, Insurance beneficiary/notify, Inspection consignee. Copy the EXACT character-by-character spelling from each document — do not normalize, abbreviate, or assume equivalence. List each document and its exact value as written. If ALL are character-for-character identical → 'All 5 documents show the same importer/consignee name: [name].' If ANY differ by even one character, letter, punctuation mark, or word → name every differing document and its exact value.",
+  "importer_consignee_discrepancy": "If MATCH: 'All 5 documents show identical importer/consignee name: [exact name].' If MISMATCH: list every document that differs — 'Invoice shows [exact value], B/L shows [exact value]' etc. Even a single extra letter, plural form, or punctuation difference counts as MISMATCH.",
+  "importer_consignee_severity": "MAJOR | MINOR | null",
+
   "lc_amount_vs_invoice_cif_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "lc_amount_vs_invoice_cif_severity": "...",
-  "check_03_detail": "...",
+  "lc_amount_vs_invoice_cif_detail": "LC amount=[value], Invoice total CIF=[value]. Check: LC amount >= Invoice CIF. If LC amount >= Invoice CIF → 'LC amount covers Invoice CIF in full.' If not → 'LC amount is insufficient — shortfall of [difference].'",
+  "lc_amount_vs_invoice_cif_severity": "CRITICAL | null",
 
-  "invoice_arithmetic_fob_name": "invoice_arithmetic_fob",
-  "invoice_arithmetic_fob_documents": "Invoice",
   "invoice_arithmetic_fob_status": "PASS | FAIL",
-  "invoice_arithmetic_fob_severity": "...",
-  "check_04_detail": "...",
+  "invoice_arithmetic_fob_detail": "CALCULATION STEPS: Step 1 — Extract raw numbers: unit price=[raw number], quantity=[raw number]. Step 2 — Calculate: [raw unit price] × [raw quantity] = [your calculated result]. Step 3 — Invoice states FOB=[raw stated value]. Step 4 — Compare: [calculated] vs [stated]. If calculated == stated → 'Arithmetic correct — [calculated] matches Invoice FOB [stated].' If calculated != stated → 'Arithmetic incorrect — [raw unit price] × [raw quantity] = [calculated] but Invoice states FOB [stated]. Difference = [calculated minus stated].'",
+  "invoice_arithmetic_fob_severity": "MAJOR | null",
 
-  "invoice_arithmetic_cif_name": "invoice_arithmetic_cif",
-  "invoice_arithmetic_cif_documents": "Invoice",
-  "invoice_arithmetic_cif5_status": "PASS | FAIL",
-  "invoice_arithmetic_cif_severity": "...",
-  "check_05_detail": "...",
+  "invoice_arithmetic_cif_status": "PASS | FAIL",
+  "invoice_arithmetic_cif_detail": "CALCULATION STEPS: Step 1 — Extract raw numbers: FOB=[raw number], Freight=[raw number], Insurance=[raw number]. Step 2 — Calculate: [FOB] + [Freight] + [Insurance] = [your calculated result]. Step 3 — Invoice states CIF=[raw stated value]. Step 4 — Compare: [calculated] vs [stated]. If calculated == stated → 'Arithmetic correct — [FOB] + [Freight] + [Insurance] = [calculated] matches Invoice CIF [stated].' If calculated != stated → 'Arithmetic incorrect — [FOB] + [Freight] + [Insurance] = [calculated] but Invoice states CIF [stated]. Difference = [calculated minus stated].'",
+  "invoice_arithmetic_cif_severity": "MAJOR | null",
 
-  "insurance_coverage_check_name": "insurance_coverage_check",
-  "insurance_coverage_check_documents": "Insurance, Invoice",
   "insurance_coverage_check_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "insurance_coverage_check_severity": "...",
-  "insurance_coverage_check_detail": "...",
+  "insurance_coverage_check_detail": "CALCULATION STEPS: Step 1 — Extract raw numbers: Insurance sum insured=[raw number], Invoice CIF=[raw number]. Step 2 — Calculate coverage %: ([sum insured] ÷ [CIF]) × 100 = [your calculated %]. Step 3 — Required minimum: 110%. Step 4 — Compare: [calculated %] vs 110%. If calculated >= 110% → 'Coverage adequate — sum insured [value] = [calculated]% of CIF [value], meets 110% requirement.' If calculated < 110% → 'Coverage inadequate — sum insured [value] = [calculated]% of CIF [value], below required 110%.'",
+  "insurance_coverage_check_severity": "CRITICAL | null",
 
-  "boe_amount_vs_invoice_cif_name": "boe_amount_vs_invoice_cif",
-  "boe_amount_vs_invoice_cif_documents": "BOE, Invoice",
   "boe_amount_vs_invoice_cif_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "boe_amount_vs_invoice_cif_severity": "...",
-  "boe_amount_vs_invoice_cif_detail": "...",
+  "boe_amount_vs_invoice_cif_detail": "CALCULATION STEPS: Step 1 — Extract raw numbers: BOE amount=[raw number], Invoice CIF=[raw number]. Step 2 — Compare: [BOE amount] vs [Invoice CIF]. Difference = [BOE amount minus Invoice CIF]. Step 3 — If difference == 0 → 'BOE amount [value] exactly matches Invoice CIF [value].' If difference != 0 → 'BOE amount [value] does not match Invoice CIF [value]. Difference = [value].'",
+  "boe_amount_vs_invoice_cif_severity": "CRITICAL | null",
 
-  "incoterm_consistency_name": "incoterm_consistency",
-  "incoterm_consistency_documents": "Invoice, B/L, LC",
   "incoterm_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "incoterm_consistency_severity": "...",
-  "incoterm_consistency_detail": "...",
+  "incoterm_consistency_detail": "Invoice incoterm=[value], B/L incoterm=[value], LC incoterm=[value]. If ALL identical → 'All 3 documents show the same incoterm: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "incoterm_consistency_severity": "MAJOR | null",
 
-  "port_of_loading_consistency_name": "port_of_loading_consistency",
-  "port_of_loading_consistency_documents": "Invoice, B/L, COO, LC",
-  "port_of_loading_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "port_of_loading_consistency_severity": "...",
-  "port_of_loading_consistency_detail": "...",
+  "port_of_loading_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "port_of_loading_detail": "Invoice=[value], B/L=[value], COO=[value], LC=[value]. If ALL identical → 'All 4 documents show the same port of loading: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "port_of_loading_severity": "MAJOR | null",
 
-  "port_of_discharge_consistency_name": "port_of_discharge_consistency",
-  "port_of_discharge_consistency_documents": "Invoice, B/L, Insurance, LC",
-  "port_of_discharge_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "port_of_discharge_consistency_severity": "...",
-  "port_of_discharge_consistency_detail": "...",
+  "port_of_discharge_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "port_of_discharge_detail": "Invoice=[value], B/L=[value], Insurance=[value], LC=[value]. If ALL identical → 'All 4 documents show the same port of discharge: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "port_of_discharge_severity": "MAJOR | null",
 
-  "vessel_consistency_name": "vessel_consistency",
-  "vessel_consistency_documents": "Invoice, B/L, Insurance",
   "vessel_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "vessel_consistency_severity": "...",
-  "vessel_consistency_detail": "...",
+  "vessel_consistency_detail": "Invoice=[value], B/L=[value], Insurance=[value]. If ALL identical → 'All 3 documents show the same vessel: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "vessel_consistency_severity": "MAJOR | null",
 
-  "bl_onboard_vs_lc_shipment_deadline_name": "bl_onboard_vs_lc_shipment_deadline",
-  "bl_onboard_vs_lc_shipment_deadline_documents": "B/L, LC",
   "bl_onboard_vs_lc_shipment_deadline_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "bl_onboard_vs_lc_shipment_deadline_severity": "...",
-  "bl_onboard_vs_lc_shipment_deadline_detail": "...",
+  "bl_onboard_vs_lc_shipment_deadline_detail": "B/L on-board date=[value], LC latest shipment date=[value]. If on-board date <= LC deadline → 'Shipment within LC deadline.' If on-board date > LC deadline → 'CRITICAL — B/L on-board date exceeds LC latest shipment date by [X] days.'",
+  "bl_onboard_vs_lc_shipment_deadline_severity": "CRITICAL | null",
 
-  "partial_shipment_compliance_name": "partial_shipment_compliance",
-  "partial_shipment_compliance_documents": "LC, B/L",
-  "partial_shipment_compliance_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "partial_shipment_compliance_severity": "...",
-  "partial_shipment_compliance_detail": "...",
+  "bl_date_vs_invoice_date_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "bl_date_vs_invoice_date_detail": "Invoice date=[value], B/L on-board date=[value]. If Invoice date <= B/L date → 'Invoice date precedes or equals B/L date — acceptable.' If Invoice date > B/L date → 'Red flag — Invoice date [value] is after B/L on-board date [value], implying goods were shipped before invoice was raised.'",
+  "bl_date_vs_invoice_date_severity": "MAJOR | null",
 
-  "transhipment_compliance_name": "transhipment_compliance",
-  "transhipment_compliance_documents": "LC, B/L",
-  "transhipment_compliance_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "transhipment_compliance_severity": "...",
-  "transhipment_compliance_detail": "...",
+  "package_count_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "package_count_detail": "Invoice=[value], Packing List=[value], B/L=[value], COO=[value], Inspection=[value]. If ALL identical → 'All 5 documents show the same package count: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "package_count_severity": "MAJOR | null",
 
-  "package_count_consistency_name": "package_count_consistency",
-  "package_count_consistency_documents": "Invoice, Packing List, B/L, COO, Inspection",
-  "package_count_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "package_count_consistency_severity": "...",
-  "package_count_consistency_detail": "...",
+  "net_weight_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "net_weight_detail": "Invoice=[value], Packing List=[value], COO=[value], Inspection=[value]. Calculate variance between highest and lowest value as a percentage. If variance <= 0.5% → 'Net weight values within 0.5% tolerance — acceptable.' If variance > 0.5% → 'Net weight variance of [X]% exceeds 0.5% tolerance — [document] shows [value] vs others showing [value].'",
+  "net_weight_severity": "MAJOR | MINOR | null",
 
-  "net_weight_consistency_name": "net_weight_consistency",
-  "net_weight_consistency_documents": "Invoice, Packing List, COO, Inspection",
-  "net_weight_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "net_weight_consistency_severity": "...",
-  "net_weight_consistency_detail": "...",
+  "gross_weight_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "gross_weight_detail": "Packing List=[value], B/L=[value]. If identical → 'Gross weight matches across Packing List and B/L.' If different → 'Packing List shows [value] but B/L shows [value].'",
+  "gross_weight_severity": "MINOR | null",
 
-  "gross_weight_consistency_name": "gross_weight_consistency",
-  "gross_weight_consistency_documents": "Packing List, B/L",
-  "gross_weight_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "gross_weight_consistency_severity": "...",
-  "gross_weight_consistency_detail": "...",
+  "commodity_description_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "commodity_description_detail": "LC commodity description=[value]. Invoice goods description=[value]. If descriptions conform → 'Invoice description conforms to LC commodity description.' If material deviation → 'Material deviation — LC requires [value] but Invoice states [value]. Specify exactly what differs.'",
+  "commodity_description_severity": "MAJOR | null",
 
-  "commodity_description_lc_vs_invoice_name": "commodity_description_lc_vs_invoice",
-  "commodity_description_lc_vs_invoice_documents": "LC, Invoice",
-  "commodity_description_lc_vs_invoice_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "commodity_description_lc_vs_invoice_severity": "...",
-  "commodity_description_lc_vs_invoice_detail": "...",
+  "hs_code_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "hs_code_detail": "Invoice=[value], Packing List=[value], COO=[value], Inspection=[value]. If ALL identical → 'All 4 documents show the same HS code: [value].' If ANY differ → '[document] shows [value] while others show [value].'",
+  "hs_code_severity": "MAJOR | null",
 
-  "hs_code_consistency_name": "hs_code_consistency",
-  "hs_code_consistency_documents": "Invoice, Packing List, COO, Inspection",
-  "hs_code_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "hs_code_consistency_severity": "...",
-  "hs_code_consistency_detail": "...",
+  "quantity_unit_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
+  "quantity_unit_detail": "Invoice=[value], Packing List=[value], B/L=[value], COO=[value]. Compare each value exactly. If ALL identical → 'All 4 documents show the same quantity and unit: [value].' If ANY single document shows a different value → status MUST be MISMATCH and detail MUST state '[document] shows [value] while others show [value].'",
+  "quantity_unit_severity": "MAJOR | null",
 
-  "quantity_unit_consistency_name": "quantity_unit_consistency",
-  "quantity_unit_consistency_documents": "Invoice, Packing List, B/L, COO",
-  "quantity_unit_consistency_status": "MATCH | MISMATCH | UNABLE TO CHECK — document missing",
-  "quantity_unit_consistency_severity": "...",
-  "quantity_unit_consistency_detail": "...",
+  "date_invoice_vs_bl_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "date_invoice_vs_bl_detail": "Invoice date=[value], B/L on-board date=[value]. If Invoice date <= B/L date → 'Date sequence correct — Invoice date precedes or equals B/L on-board date.' If Invoice date > B/L date → 'Date sequence violation — Invoice date [value] is after B/L on-board date [value].'",
+  "date_invoice_vs_bl_severity": "MAJOR | null",
 
-  "invoice_date_vs_bl_onboard_date_name": "invoice_date_vs_bl_onboard_date",
-  "invoice_date_vs_bl_onboard_date_documents": "Invoice, B/L",
-  "invoice_date_vs_bl_onboard_date_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "invoice_date_vs_bl_onboard_date_severity": "...",
-  "invoice_date_vs_bl_onboard_date_detail": "...",
+  "date_bl_vs_lc_shipment_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "date_bl_vs_lc_shipment_detail": "B/L date=[value], LC latest shipment date=[value]. If B/L date <= LC deadline → 'B/L date within LC latest shipment date.' If B/L date > LC deadline → 'CRITICAL — B/L date [value] exceeds LC latest shipment date [value].'",
+  "date_bl_vs_lc_shipment_severity": "CRITICAL | null",
 
-  "bl_date_vs_lc_shipment_deadline_name": "bl_date_vs_lc_shipment_deadline",
-  "bl_date_vs_lc_shipment_deadline_documents": "B/L, LC",
-  "bl_date_vs_lc_shipment_deadline_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "bl_date_vs_lc_shipment_deadline_severity": "...",
-  "bl_date_vs_lc_shipment_deadline_detail": "...",
+  "date_insurance_vs_bl_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "date_insurance_vs_bl_detail": "Insurance date=[value], B/L on-board date=[value]. If Insurance date <= B/L date → 'Insurance issued before or at shipment — acceptable.' If Insurance date > B/L date → 'CRITICAL — Insurance date [value] is after B/L on-board date [value] — goods were not insured at time of shipment.'",
+  "date_insurance_vs_bl_severity": "CRITICAL | null",
 
-  "insurance_date_vs_bl_date_name": "insurance_date_vs_bl_date",
-  "insurance_date_vs_bl_date_documents": "Insurance, B/L",
-  "insurance_date_vs_bl_date_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "insurance_date_vs_bl_date_severity": "...",
-  "insurance_date_vs_bl_date_detail": "...",
+  "date_inspection_vs_bl_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "date_inspection_vs_bl_detail": "Inspection date=[value], B/L on-board date=[value]. If Inspection date <= B/L date → 'Inspection completed before loading — acceptable.' If Inspection date > B/L date → 'Inspection date [value] is after B/L on-board date [value] — goods were loaded before inspection.'",
+  "date_inspection_vs_bl_severity": "MAJOR | null",
 
-  "inspection_date_vs_bl_date_name": "inspection_date_vs_bl_date",
-  "inspection_date_vs_bl_date_documents": "Inspection, B/L",
-  "inspection_date_vs_bl_date_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "inspection_date_vs_bl_date_severity": "...",
-  "inspection_date_vs_bl_date_detail": "...",
+  "date_all_vs_lc_expiry_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "date_all_vs_lc_expiry_detail": "LC expiry date=[value]. Check each document date: Invoice=[value], B/L=[value], COO=[value], Insurance=[value], Inspection=[value], BOE=[value], Packing List=[value]. If ALL <= LC expiry → 'All document dates are within LC expiry date.' If ANY exceed → '[document] dated [value] exceeds LC expiry date [value] — CRITICAL.'",
+  "date_all_vs_lc_expiry_severity": "CRITICAL | null",
 
-  "all_dates_vs_lc_expiry_name": "all_dates_vs_lc_expiry",
-  "all_dates_vs_lc_expiry_documents": "All Documents, LC",
-  "all_dates_vs_lc_expiry_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "all_dates_vs_lc_expiry_severity": "...",
-  "all_dates_vs_lc_expiry_detail": "...",
+  "presentation_period_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "presentation_period_detail": "B/L on-board date=[value]. Presentation deadline = B/L date + 21 days = [calculated deadline]. Today's date=[value]. If today <= deadline → 'Presentation is within the 21-day window — [X] days remaining.' If today > deadline → 'Presentation period expired on [deadline] — [X] days overdue.'",
+  "presentation_period_severity": "CRITICAL | null",
 
-  "presentation_period_check_name": "presentation_period_check",
-  "presentation_period_check_documents": "B/L, LC",
-  "presentation_period_check_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "presentation_period_check_severity": "...",
-  "presentation_period_check_detail": "...",
+  "lc_docs_checklist_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "lc_docs_checklist_detail": "LC requires: [list all]. Present in submission: [list]. Missing: [list or 'None']. Non-conforming: [list or 'None']. If all present and conforming → 'All LC-required documents are present and conforming.' If any missing or non-conforming → state exactly which documents are missing or non-conforming.",
+  "lc_docs_checklist_severity": "CRITICAL | MAJOR | null",
 
-  "lc_documents_checklist_check_name": "lc_documents_checklist_check",
-  "lc_documents_checklist_check_documents": "LC required list vs submitted set",
-  "lc_documents_checklist_check_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "lc_documents_checklist_check_severity": "...",
-  "lc_documents_checklist_check_detail": "...",
+  "partial_shipment_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "partial_shipment_detail": "LC partial shipment clause=[ALLOWED/NOT ALLOWED]. B/L sets presented=[value]. If NOT ALLOWED and single full B/L set → 'Compliant — single full B/L set presented as required.' If NOT ALLOWED and multiple sets → 'Non-compliant — [X] B/L sets presented but LC prohibits partial shipment.'",
+  "partial_shipment_severity": "MAJOR | null",
 
-  "stale_bl_check_name": "stale_bl_check",
-  "stale_bl_check_documents": "B/L, LC",
-  "stale_bl_check_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
-  "stale_bl_check_severity": "...",
-  "stale_bl_check_detail": "...",
+  "transhipment_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "transhipment_detail": "LC transhipment clause=[ALLOWED/NOT ALLOWED]. B/L routing=[direct voyage / via transhipment port at [value]]. If NOT ALLOWED and direct → 'Compliant — B/L shows direct voyage with no transhipment.' If NOT ALLOWED and transhipment port shown → 'Non-compliant — B/L shows transhipment via [port] but LC prohibits transhipment.'",
+  "transhipment_severity": "MAJOR | null",
+
+  "stale_bl_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "stale_bl_detail": "B/L on-board date=[value]. Presentation date=[value]. Days elapsed=[X] days. If <= 21 days → 'B/L is not stale — presented within 21 days of on-board date.' If > 21 days → 'B/L is stale — [X] days elapsed since on-board date, exceeding the 21-day limit.'",
+  "stale_bl_severity": "MAJOR | null",
+
+  "third_party_docs_status": "PASS | FAIL | UNABLE TO CHECK — document missing",
+  "third_party_docs_detail": "LC clause on third-party documents=[state exact LC clause]. Inspection certificate issuer=[value]. If issuer meets LC requirement → 'Inspection certificate issuer [value] is acceptable per LC terms.' If not → 'Non-compliant — LC requires [value] but certificate was issued by [value].'",
+  "third_party_docs_severity": "MAJOR | null",
 
   "lc_doc_01_required": "...",
   "lc_doc_01_status": "PRESENT | MISSING | NON-CONFORMING",
@@ -376,12 +408,14 @@ EXACT OUTPUT STRUCTURE
   "overall_summary": "..."
 }
 
+
 RULES:
 - Every value is a plain string or array of plain strings
 - NO nested objects. NO objects inside arrays. EVER.
 - missing_documents, lc_required_documents, lc_special_conditions, bl_container_numbers
   must be arrays of plain strings only
 - All other fields are plain strings
+- STATUS MUST ALWAYS MATCH THE EVIDENCE IN THE DETAIL — this is non-negotiable
 - Return ONLY this JSON. No text before or after.
 """
 
