@@ -246,6 +246,7 @@ def main():
         else:
             print("ℹ️ No extractor configured for this document type")
 
+        
         final_llm_results.append({
             "file_name": os.path.basename(file_path),
             "doc_type": doc_type,
@@ -258,7 +259,9 @@ def main():
     if doc not in uploaded_doc_types
     ]
 
-
+    print('extracted_text',extracted_data)
+    print('doctype*****',doc_type)
+    print('final llm results',final_llm_results)
     # --------------------------------
     # Step 5: Summarize (LC vs Docs)
     # --------------------------------
