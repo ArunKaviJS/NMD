@@ -65,147 +65,6 @@ PART 1 — STRUCTURED FIELD EXTRACTION
 Extract the following fields from the input documents.
 If a field is not present or cannot be determined, return null.
 
---- LETTER OF CREDIT ---
-lc_number
-lc_issue_date
-lc_expiry_date
-lc_expiry_place
-lc_amount
-lc_currency
-lc_tolerance
-lc_applicant
-lc_beneficiary
-lc_issuing_bank
-lc_advising_bank
-lc_latest_shipment_date
-lc_incoterm
-lc_port_of_loading
-lc_port_of_discharge
-lc_partial_shipment
-lc_transhipment
-lc_presentation_period
-lc_commodity_description
-lc_hs_code
-lc_quantity
-lc_required_documents        ← array of plain strings
-lc_special_conditions        ← array of plain strings
-
---- COMMERCIAL INVOICE ---
-invoice_number
-invoice_date
-invoice_exporter_name_address
-invoice_importer_name_address
-invoice_lc_reference
-invoice_goods_description
-invoice_hs_code
-invoice_quantity
-invoice_unit_price
-invoice_incoterm
-invoice_total_fob
-invoice_freight
-invoice_insurance
-invoice_total_cif
-invoice_currency
-invoice_port_of_loading
-invoice_port_of_discharge
-invoice_vessel
-invoice_bank_details
-
---- BILL OF LADING ---
-bl_number
-bl_date_of_issue
-bl_on_board_date
-bl_shipper
-bl_consignee
-bl_notify_party
-bl_vessel
-bl_voyage
-bl_port_of_loading
-bl_port_of_discharge
-bl_number_of_packages
-bl_gross_weight
-bl_cbm
-bl_freight_terms
-bl_incoterm
-bl_lc_reference
-bl_invoice_reference
-bl_number_of_originals
-bl_container_numbers          ← array of plain strings
-
---- CERTIFICATE OF ORIGIN ---
-coo_certificate_number
-coo_date
-coo_exporter
-coo_consignee
-coo_issuing_authority
-coo_country_of_origin
-coo_port_of_loading
-coo_port_of_discharge
-coo_hs_code
-coo_goods_description
-coo_quantity
-coo_net_weight
-coo_gross_weight
-coo_invoice_reference
-
---- BILL OF EXCHANGE ---
-boe_number
-boe_date
-boe_drawer
-boe_drawee
-boe_pay_to_order_of
-boe_amount_figures
-boe_currency
-boe_tenor
-boe_lc_reference
-boe_invoice_reference
-boe_incoterm
-boe_goods_description
-
---- INSPECTION CERTIFICATE ---
-inspection_cert_number
-inspection_date
-inspection_issuing_body
-inspection_client_exporter
-inspection_consignee
-inspection_commodity
-inspection_hs_code
-inspection_quantity_inspected
-inspection_net_weight
-inspection_overall_conclusion
-inspection_lc_reference
-inspection_invoice_reference
-
---- INSURANCE CERTIFICATE ---
-insurance_policy_number
-insurance_date
-insurance_insured
-insurance_beneficiary
-insurance_sum_insured
-insurance_cif_value
-insurance_coverage_factor
-insurance_coverage_type
-insurance_vessel
-insurance_port_of_loading
-insurance_port_of_discharge
-insurance_on_board_date
-insurance_invoice_reference
-
---- PACKING LIST ---
-pl_date
-pl_exporter
-pl_consignee
-pl_lc_reference
-pl_invoice_reference
-pl_hs_code
-pl_total_packages
-pl_total_net_weight
-pl_total_gross_weight
-pl_total_cbm
-pl_vessel
-pl_port_of_loading
-pl_port_of_discharge
-pl_marks_and_numbers
 
 ═══════════════════════════════════════════════════════════════
 PART 2 — CROSS-DOCUMENT COMPLIANCE CHECKS
@@ -216,157 +75,6 @@ Run every check below. For each check:
 2. Write details with full evidence and arithmetic.
 3. Set status LAST — only after reading back your own details and values.
 
---- IDENTITY CHECKS ---
-
-CHECK IDENTITY-1 — Exporter Name Consistency
-Compare exporter/shipper/assured/client name across:
-Invoice, Packing List, Bill of Lading (shipper), Certificate of Origin,
-Insurance Certificate (assured), Inspection Certificate (client), Bill of Exchange (drawer).
-Copy the EXACT character-by-character spelling from each document.
-Do not normalize, abbreviate, or assume equivalence.
-STATUS RULE: PASS if all 7 identical character-for-character. FAIL if any differ by even one character.
-
-CHECK IDENTITY-2 — Importer / Consignee Name Consistency
-Compare consignee name across:
-Invoice, Bill of Lading, Certificate of Origin,
-Insurance Certificate (beneficiary/notify), Inspection Certificate.
-Copy the EXACT character-by-character spelling from each document.
-STATUS RULE: PASS if all 5 identical. FAIL if any differ by even one character.
-
---- FINANCIAL CHECKS ---
-
-CHECK FINANCIAL-3 — LC Amount vs Invoice Total CIF
-Step 1: lc_max_allowed = lc_amount + (lc_amount × tolerance%)
-        Show arithmetic: lc_amount × tolerance% = X, then lc_amount + X = lc_max_allowed
-Step 2: Compare lc_max_allowed to invoice_total_cif
-STATUS RULE: lc_max_allowed >= invoice_total_cif → PASS. lc_max_allowed < invoice_total_cif → FAIL.
-
-CHECK FINANCIAL-4 — LC Unit Price × Quantity vs Invoice FOB
-Step 1: calculated_fob = LC unit price (CIF basis) × total quantity in kg
-        Show: lc_unit_price × quantity_kg = calculated_fob
-Step 2: difference = calculated_fob - invoice_fob_stated
-        Show: calculated_fob - invoice_fob_stated = difference
-STATUS RULE — MECHANICAL, NO EXCEPTIONS:
-        difference = 0.00 → PASS. difference ≠ 0.00 → FAIL.
-        NEVER write PASS if difference is non-zero.
-
-CHECK FINANCIAL-5 — FOB + Freight + Insurance = Total CIF
-Step 1: calculated_cif = invoice_fob + invoice_freight + invoice_insurance
-        Show: fob + freight + insurance = calculated_cif
-Step 2: difference = calculated_cif - invoice_total_cif_stated
-        Show arithmetic.
-STATUS RULE: difference ≤ 1.00 → PASS. difference > 1.00 → FAIL.
-
-CHECK FINANCIAL-6 — Insurance Sum Insured = 110% of Invoice Total CIF
-Step 1: expected = invoice_total_cif × 1.10
-        Show: invoice_total_cif × 1.10 = expected
-Step 2: Calculate coverage% = (actual_sum_insured ÷ invoice_total_cif) × 100
-        Show: (sum_insured ÷ cif) × 100 = coverage%
-Step 3: difference = actual_sum_insured - expected
-        Show arithmetic.
-STATUS RULE: coverage% >= 110% → PASS. coverage% < 110% → FAIL.
-
-CHECK FINANCIAL-7 — Bill of Exchange Amount = Invoice Total CIF
-Step 1: difference = boe_amount - invoice_total_cif
-        Show: boe_amount - invoice_total_cif = difference
-STATUS RULE: difference = 0.00 → PASS. difference ≠ 0.00 → FAIL.
-
-CHECK FINANCIAL-8 — Incoterm Consistency
-Compare incoterm across: Invoice, Bill of Lading, Letter of Credit.
-Note: CFR and CIF are different terms — flag if mixed.
-STATUS RULE: All 3 identical → MATCH. Any differ → NOT MATCH.
-
-CHECK FINANCIAL-9 — Port of Loading Consistency
-Compare across: Bill of Lading, Invoice, Certificate of Origin, Letter of Credit.
-STATUS RULE: All 4 identical (ignore minor formatting) → MATCH. Any substantive difference → NOT MATCH.
-
-CHECK FINANCIAL-10 — Port of Discharge Consistency
-Compare across: Bill of Lading, Invoice, Insurance Certificate, Letter of Credit.
-STATUS RULE: All 4 identical → MATCH. Any differ → NOT MATCH.
-
-CHECK FINANCIAL-11 — Vessel Name Consistency
-Compare across: Invoice, Bill of Lading, Insurance Certificate.
-STATUS RULE: All 3 identical → MATCH. Any differ → NOT MATCH.
-
-CHECK FINANCIAL-12 — B/L On-Board Date ≤ LC Latest Shipment Date
-Convert both dates to comparable format (DD MMM YYYY).
-STATUS RULE: bl_on_board_date <= lc_latest_shipment_date → PASS. Else → FAIL.
-
-CHECK FINANCIAL-13 — B/L Date ≥ Invoice Date
-STATUS RULE: bl_date_of_issue >= invoice_date → PASS. Else → FAIL.
-
---- QUANTITY & WEIGHT CHECKS ---
-
-CHECK QUANTITY-14 — Number of Packages Consistency
-Compare across: Invoice, Packing List, Bill of Lading, Certificate of Origin, Inspection Certificate.
-STATUS RULE: All 5 identical → PASS. Any differ → FAIL.
-
-CHECK QUANTITY-15 — Net Weight Consistency (flag variance > 0.5%)
-Compare across: Invoice, Packing List, Bill of Lading, Inspection Certificate.
-Step 1: variance_pct = |inspection_net_weight - invoice_net_weight| ÷ invoice_net_weight × 100
-        Show arithmetic.
-STATUS RULE: All match exactly → PASS. Inspection variance > 0.5% → WARNING. Any non-inspection document differs → FAIL.
-
-CHECK QUANTITY-16 — Gross Weight Consistency
-Compare across: Invoice, Packing List, Bill of Lading.
-STATUS RULE: All 3 identical → MATCH. Any differ → NOT MATCH.
-
-CHECK QUANTITY-17 — Commodity Description vs LC Required Wording
-Write out LC required description exactly.
-Write out invoice description exactly.
-Identify missing or mismatched attributes.
-STATUS RULE: Invoice satisfies all LC required attributes → MATCH. Any missing or different → NOT MATCH.
-
-CHECK QUANTITY-18 — Quantity / Unit Consistency
-Compare across: Invoice, Packing List, Bill of Lading, Certificate of Origin.
-STATUS RULE: All 4 identical → MATCH. Any differ → NOT MATCH.
-
-CHECK QUANTITY-19 — B/L Date ≤ LC Latest Shipment Date
-STATUS RULE: bl_date_of_issue <= lc_latest_shipment_date → PASS. Else → FAIL.
-
-CHECK QUANTITY-20 — Insurance Date ≤ LC Latest Shipment Date
-STATUS RULE: insurance_date <= lc_latest_shipment_date → PASS. Else → FAIL.
-
-CHECK QUANTITY-21 — Inspection Date ≤ LC Latest Shipment Date
-STATUS RULE: inspection_date <= lc_latest_shipment_date → PASS. Else → FAIL.
-
-CHECK QUANTITY-22 — All Document Dates ≤ LC Expiry Date
-Check each of the 8 documents' primary date against lc_expiry_date.
-STATUS RULE: All within expiry → PASS. Any exceed → FAIL.
-
-CHECK QUANTITY-23 — Presentation Within LC Presentation Period (21 Days)
-Step 1: presentation_deadline = bl_on_board_date + 21 days. Show arithmetic.
-Step 2: Get today's date in IST:
-        from datetime import datetime; from zoneinfo import ZoneInfo
-        today_ist = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y")
-Step 3: days_remaining = presentation_deadline - today_ist. Show arithmetic.
-Step 4: Also verify today_ist <= lc_expiry_date.
-STATUS RULE: today_ist <= presentation_deadline AND today_ist <= lc_expiry → PASS. Either breached → FAIL.
-
-CHECK QUANTITY-24 — All LC Required Documents Provided
-List every document in lc_required_documents.
-For each, check if a matching doc_type exists in the 8 provided files.
-Mark each: PRESENT or MISSING.
-STATUS RULE: All present → PASS. Any missing → FAIL.
-
-CHECK QUANTITY-25 — Partial Shipment Check
-Read lc_partial_shipment. Count B/L sets provided.
-STATUS RULE: NOT ALLOWED + 1 B/L set → PASS. NOT ALLOWED + multiple B/Ls → FAIL. ALLOWED → INFO.
-
-CHECK QUANTITY-26 — Transhipment Check
-Read lc_transhipment. Check B/L for transhipment indication.
-STATUS RULE: NOT ALLOWED + direct voyage → PASS. NOT ALLOWED + transhipment shown → FAIL. ALLOWED → INFO.
-
-CHECK QUANTITY-27 — Stale B/L Check (UCP 600 Art. 14c)
-Step 1: stale_deadline = bl_on_board_date + 21 days. Show arithmetic.
-Step 2: Get today_ist (same as CHECK-23).
-Step 3: days_until_stale = stale_deadline - today_ist. Show arithmetic.
-STATUS RULE: today_ist <= stale_deadline → PASS. today_ist > stale_deadline → FAIL (B/L IS STALE).
-
-CHECK QUANTITY-28 — Third-Party Document Restrictions
-Read lc_special_conditions for any issuer restriction on inspection certificate.
-Compare to inspection_issuing_body.
-STATUS RULE: Issuing body matches LC restriction or no restriction → PASS. Does not satisfy restriction → FAIL. No restriction stated → INFO.
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT — EXACT STRUCTURE
@@ -384,139 +92,140 @@ CRITICAL OUTPUT RULES:
 {
   "extracted_fields": {
 
-    "lc_number": "",
-    "lc_issue_date": "",
-    "lc_expiry_date": "",
-    "lc_expiry_place": "",
-    "lc_amount": "",
-    "lc_currency": "",
-    "lc_tolerance": "",
-    "lc_applicant": "",
-    "lc_beneficiary": "",
-    "lc_issuing_bank": "",
-    "lc_advising_bank": "",
-    "lc_latest_shipment_date": "",
-    "lc_incoterm": "",
-    "lc_port_of_loading": "",
-    "lc_port_of_discharge": "",
-    "lc_partial_shipment": "",
-    "lc_transhipment": "",
-    "lc_presentation_period": "",
-    "lc_commodity_description": "",
-    "lc_hs_code": "",
-    "lc_quantity": "",
-    "lc_required_documents": [],
-    "lc_special_conditions": [],
+    "lc_number": "FILL: LC number exactly as printed on the Letter of Credit",
+    "lc_issue_date": "FILL: date of issue from LC in DD MMM YYYY format",
+    "lc_expiry_date": "FILL: expiry date from LC in DD MMM YYYY format",
+    "lc_expiry_place": "FILL: place of expiry as stated in LC",
+    "lc_amount": "FILL: LC amount as a plain number string e.g. 148000.00",
+    "lc_currency": "FILL: currency code e.g. USD",
+    "lc_tolerance": "FILL: tolerance as stated e.g. +/- 5%",
+    "lc_applicant": "FILL: full name and address of applicant (buyer) exactly as in LC",
+    "lc_beneficiary": "FILL: full name and address of beneficiary (seller) exactly as in LC",
+    "lc_issuing_bank": "FILL: full name, address and SWIFT of issuing bank exactly as in LC",
+    "lc_advising_bank": "FILL: full name, address and SWIFT of advising bank exactly as in LC",
+    "lc_latest_shipment_date": "FILL: latest shipment date from LC in DD MMM YYYY format",
+    "lc_incoterm": "FILL: incoterm exactly as stated in LC e.g. CIF Antwerp",
+    "lc_port_of_loading": "FILL: port of loading exactly as stated in LC",
+    "lc_port_of_discharge": "FILL: port of discharge exactly as stated in LC",
+    "lc_partial_shipment": "FILL: ALLOWED or NOT ALLOWED exactly as stated in LC",
+    "lc_transhipment": "FILL: ALLOWED or NOT ALLOWED exactly as stated in LC",
+    "lc_presentation_period": "FILL: presentation period exactly as stated in LC e.g. 21 days after B/L date",
+    "lc_commodity_description": "FILL: commodity description exactly word-for-word as written in LC",
+    "lc_hs_code": "FILL: HS code exactly as stated in LC",
+    "lc_quantity": "FILL: quantity exactly as stated in LC e.g. 800 Bags x 60 kg = 48.000 MT",
+    "lc_required_documents": ["FILL: each required document as a separate plain string exactly as listed in LC — one item per document"],
+    "lc_special_conditions": ["FILL: each special condition as a separate plain string exactly as stated in LC — empty array [] if none"],
 
-    "invoice_number": "",
-    "invoice_date": "",
-    "invoice_exporter_name_address": "",
-    "invoice_importer_name_address": "",
-    "invoice_lc_reference": "",
-    "invoice_goods_description": "",
-    "invoice_hs_code": "",
-    "invoice_quantity": "",
-    "invoice_unit_price": "",
-    "invoice_incoterm": "",
-    "invoice_total_fob": "",
-    "invoice_freight": "",
-    "invoice_insurance": "",
-    "invoice_total_cif": "",
-    "invoice_currency": "",
-    "invoice_port_of_loading": "",
-    "invoice_port_of_discharge": "",
-    "invoice_vessel": "",
-    "invoice_bank_details": "",
+    "invoice_number": "FILL: invoice number exactly as printed on Commercial Invoice",
+    "invoice_date": "FILL: invoice date in DD MMM YYYY format",
+    "invoice_exporter_name_address": "FILL: full exporter name and address exactly as printed on invoice — preserve every word and character",
+    "invoice_importer_name_address": "FILL: full importer/consignee name and address exactly as printed on invoice — preserve every word and character",
+    "invoice_lc_reference": "FILL: LC number referenced on invoice",
+    "invoice_goods_description": "FILL: goods description exactly as written on invoice — preserve all words, grade, process, packing details",
+    "invoice_hs_code": "FILL: HS code exactly as stated on invoice",
+    "invoice_quantity": "FILL: quantity exactly as stated on invoice e.g. 800 Bags / 48.000 MT",
+    "invoice_unit_price": "FILL: unit price exactly as stated on invoice e.g. USD 3.20 per kg",
+    "invoice_incoterm": "FILL: incoterm exactly as stated on invoice e.g. CFR Antwerp",
+    "invoice_total_fob": "FILL: total FOB value as plain number string e.g. 144000.00",
+    "invoice_freight": "FILL: freight value as plain number string e.g. 8200.00",
+    "invoice_insurance": "FILL: insurance value as plain number string e.g. 1800.00",
+    "invoice_total_cif": "FILL: total CIF value as plain number string e.g. 154000.00",
+    "invoice_currency": "FILL: currency code e.g. USD",
+    "invoice_port_of_loading": "FILL: port of loading exactly as stated on invoice",
+    "invoice_port_of_discharge": "FILL: port of discharge exactly as stated on invoice",
+    "invoice_vessel": "FILL: vessel name exactly as stated on invoice",
+    "invoice_bank_details": "FILL: full bank details as stated on invoice including bank name, account number, IFSC, SWIFT",
 
-    "bl_number": "",
-    "bl_date_of_issue": "",
-    "bl_on_board_date": "",
-    "bl_shipper": "",
-    "bl_consignee": "",
-    "bl_notify_party": "",
-    "bl_vessel": "",
-    "bl_voyage": "",
-    "bl_port_of_loading": "",
-    "bl_port_of_discharge": "",
-    "bl_number_of_packages": "",
-    "bl_gross_weight": "",
-    "bl_cbm": "",
-    "bl_freight_terms": "",
-    "bl_incoterm": "",
-    "bl_lc_reference": "",
-    "bl_invoice_reference": "",
-    "bl_number_of_originals": "",
-    "bl_container_numbers": [],
+    "bl_number": "FILL: B/L number exactly as printed on Bill of Lading",
+    "bl_date_of_issue": "FILL: date of issue from B/L in DD MMM YYYY format",
+    "bl_on_board_date": "FILL: on-board notation date from B/L in DD MMM YYYY format — this is the shipped on board date, not just issue date",
+    "bl_shipper": "FILL: shipper name and address exactly as printed on B/L — preserve every word and character",
+    "bl_consignee": "FILL: consignee exactly as printed on B/L e.g. TO THE ORDER OF [name] or named consignee — preserve every word",
+    "bl_notify_party": "FILL: notify party exactly as printed on B/L",
+    "bl_vessel": "FILL: vessel name exactly as printed on B/L",
+    "bl_voyage": "FILL: voyage number exactly as printed on B/L",
+    "bl_port_of_loading": "FILL: port of loading exactly as printed on B/L",
+    "bl_port_of_discharge": "FILL: port of discharge exactly as printed on B/L",
+    "bl_number_of_packages": "FILL: number of packages exactly as stated in cargo description on B/L e.g. 800 Bags",
+    "bl_gross_weight": "FILL: gross weight exactly as stated on B/L e.g. 48.960 MT",
+    "bl_cbm": "FILL: volume in CBM exactly as stated on B/L",
+    "bl_freight_terms": "FILL: PREPAID or COLLECT exactly as stated on B/L",
+    "bl_incoterm": "FILL: incoterm exactly as stated on B/L",
+    "bl_lc_reference": "FILL: LC number referenced on B/L",
+    "bl_invoice_reference": "FILL: invoice number referenced on B/L",
+    "bl_number_of_originals": "FILL: number of original B/L sets e.g. THREE (3)",
+    "bl_container_numbers": ["FILL: each container number as a separate plain string e.g. MSCU8901234"],
 
-    "coo_certificate_number": "",
-    "coo_date": "",
-    "coo_exporter": "",
-    "coo_consignee": "",
-    "coo_issuing_authority": "",
-    "coo_country_of_origin": "",
-    "coo_port_of_loading": "",
-    "coo_port_of_discharge": "",
-    "coo_hs_code": "",
-    "coo_goods_description": "",
-    "coo_quantity": "",
-    "coo_net_weight": "",
-    "coo_gross_weight": "",
-    "coo_invoice_reference": "",
+    "coo_certificate_number": "FILL: certificate number exactly as printed on Certificate of Origin",
+    "coo_date": "FILL: certificate date in DD MMM YYYY format",
+    "coo_exporter": "FILL: exporter name and address exactly as printed on COO — preserve every word and character",
+    "coo_consignee": "FILL: consignee name and address exactly as printed on COO — preserve every word and character",
+    "coo_issuing_authority": "FILL: issuing authority name exactly as printed on COO",
+    "coo_country_of_origin": "FILL: country of origin exactly as stated on COO",
+    "coo_port_of_loading": "FILL: port of loading exactly as stated on COO",
+    "coo_port_of_discharge": "FILL: port of discharge exactly as stated on COO",
+    "coo_hs_code": "FILL: HS code exactly as stated on COO",
+    "coo_goods_description": "FILL: goods description exactly as written on COO — preserve all words",
+    "coo_quantity": "FILL: quantity exactly as stated on COO",
+    "coo_net_weight": "FILL: net weight exactly as stated on COO e.g. 48.000 MT",
+    "coo_gross_weight": "FILL: gross weight exactly as stated on COO e.g. 48.960 MT",
+    "coo_invoice_reference": "FILL: invoice number referenced on COO",
 
-    "boe_number": "",
-    "boe_date": "",
-    "boe_drawer": "",
-    "boe_drawee": "",
-    "boe_pay_to_order_of": "",
-    "boe_amount_figures": "",
-    "boe_currency": "",
-    "boe_tenor": "",
-    "boe_lc_reference": "",
-    "boe_invoice_reference": "",
-    "boe_incoterm": "",
-    "boe_goods_description": "",
+    "boe_number": "FILL: BOE number exactly as printed on Bill of Exchange",
+    "boe_date": "FILL: BOE date in DD MMM YYYY format",
+    "boe_drawer": "FILL: drawer name and address exactly as printed on BOE — preserve every word and character",
+    "boe_drawee": "FILL: drawee bank name and address exactly as printed on BOE",
+    "boe_pay_to_order_of": "FILL: pay to order of value exactly as printed on BOE",
+    "boe_amount_figures": "FILL: amount in figures as plain number string e.g. 154000.00",
+    "boe_currency": "FILL: currency code e.g. USD",
+    "boe_tenor": "FILL: tenor exactly as stated on BOE e.g. AT SIGHT",
+    "boe_lc_reference": "FILL: LC number referenced on BOE",
+    "boe_invoice_reference": "FILL: invoice number referenced on BOE",
+    "boe_incoterm": "FILL: incoterm exactly as stated on BOE",
+    "boe_goods_description": "FILL: goods description exactly as stated on BOE",
 
-    "inspection_cert_number": "",
-    "inspection_date": "",
-    "inspection_issuing_body": "",
-    "inspection_client_exporter": "",
-    "inspection_consignee": "",
-    "inspection_commodity": "",
-    "inspection_hs_code": "",
-    "inspection_quantity_inspected": "",
-    "inspection_net_weight": "",
-    "inspection_overall_conclusion": "",
-    "inspection_lc_reference": "",
-    "inspection_invoice_reference": "",
+    "inspection_cert_number": "FILL: certificate number exactly as printed on Inspection Certificate",
+    "inspection_date": "FILL: inspection date in DD MMM YYYY format",
+    "inspection_issuing_body": "FILL: issuing body name exactly as printed on Inspection Certificate",
+    "inspection_client_exporter": "FILL: client/exporter name exactly as printed on Inspection Certificate — preserve every word and character",
+    "inspection_consignee": "FILL: consignee name exactly as printed on Inspection Certificate — preserve every word and character",
+    "inspection_commodity": "FILL: commodity description exactly as stated on Inspection Certificate",
+    "inspection_hs_code": "FILL: HS code exactly as stated on Inspection Certificate",
+    "inspection_quantity_inspected": "FILL: quantity inspected exactly as stated e.g. 49.200 MT",
+    "inspection_net_weight": "FILL: net weight found exactly as stated as plain number string e.g. 49.200",
+    "inspection_overall_conclusion": "FILL: overall conclusion exactly as stated e.g. APPROVED",
+    "inspection_lc_reference": "FILL: LC number referenced on Inspection Certificate or null if not present",
+    "inspection_invoice_reference": "FILL: invoice number referenced on Inspection Certificate",
 
-    "insurance_policy_number": "",
-    "insurance_date": "",
-    "insurance_insured": "",
-    "insurance_beneficiary": "",
-    "insurance_sum_insured": "",
-    "insurance_cif_value": "",
-    "insurance_coverage_factor": "",
-    "insurance_coverage_type": "",
-    "insurance_vessel": "",
-    "insurance_port_of_loading": "",
-    "insurance_port_of_discharge": "",
-    "insurance_on_board_date": "",
-    "insurance_invoice_reference": "",
+    "insurance_policy_number": "FILL: policy number exactly as printed on Insurance Certificate",
+    "insurance_date": "FILL: certificate date in DD MMM YYYY format",
+    "insurance_insured": "FILL: insured/assured name and address exactly as printed on Insurance Certificate — preserve every word and character",
+    "insurance_beneficiary": "FILL: beneficiary name exactly as printed on Insurance Certificate — preserve every word and character",
+    "insurance_sum_insured": "FILL: sum insured as plain number string e.g. 169400.00",
+    "insurance_cif_value": "FILL: CIF base value as plain number string e.g. 154000.00",
+    "insurance_coverage_factor": "FILL: coverage factor exactly as stated e.g. 110% of CIF",
+    "insurance_coverage_type": "FILL: coverage type exactly as stated e.g. ICC (A) All Risks",
+    "insurance_vessel": "FILL: vessel name exactly as printed on Insurance Certificate",
+    "insurance_port_of_loading": "FILL: port of loading exactly as stated on Insurance Certificate",
+    "insurance_port_of_discharge": "FILL: port of discharge exactly as stated on Insurance Certificate",
+    "insurance_on_board_date": "FILL: on-board date in DD MMM YYYY format",
+    "insurance_invoice_reference": "FILL: invoice number referenced on Insurance Certificate",
 
-    "pl_date": "",
-    "pl_exporter": "",
-    "pl_consignee": "",
-    "pl_lc_reference": "",
-    "pl_invoice_reference": "",
-    "pl_hs_code": "",
-    "pl_total_packages": "",
-    "pl_total_net_weight": "",
-    "pl_total_gross_weight": "",
-    "pl_total_cbm": "",
-    "pl_vessel": "",
-    "pl_port_of_loading": "",
-    "pl_port_of_discharge": "",
-    "pl_marks_and_numbers": ""
+    "pl_date": "FILL: packing list date in DD MMM YYYY format",
+    "pl_exporter": "FILL: exporter name exactly as printed on Packing List — preserve every word and character",
+    "pl_consignee": "FILL: consignee name exactly as printed on Packing List — preserve every word and character",
+    "pl_lc_reference": "FILL: LC number referenced on Packing List",
+    "pl_invoice_reference": "FILL: invoice number referenced on Packing List",
+    "pl_hs_code": "FILL: HS code exactly as stated on Packing List",
+    "pl_total_packages": "FILL: total number of packages exactly as stated e.g. 800 Bags",
+    "pl_total_net_weight": "FILL: total net weight exactly as stated e.g. 48000 kg or 48.000 MT",
+    "pl_total_gross_weight": "FILL: total gross weight exactly as stated e.g. 48960 kg or 48.960 MT",
+    "pl_total_cbm": "FILL: total volume exactly as stated e.g. 148.0 CBM",
+    "pl_vessel": "FILL: vessel name exactly as printed on Packing List",
+    "pl_port_of_loading": "FILL: port of loading exactly as stated on Packing List",
+    "pl_port_of_discharge": "FILL: port of discharge exactly as stated on Packing List",
+    "pl_marks_and_numbers": "FILL: marks and numbers exactly as printed on Packing List — preserve all lines"
+
 
   },
 {
