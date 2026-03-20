@@ -83,7 +83,7 @@ def store_trade_finance_result(
         "_id": ObjectId(),
 
         # 🔐 System metadata
-        "clusterId": ObjectId("69a67a43d128d114aeab0eba"),
+        "clusterId": ObjectId("69bd152cfcc82202c8009728"),
         "userId": ObjectId("6964a0a09576df2e9933315d"),
         "status": "1",
         "processingStatus": "Completed",

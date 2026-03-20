@@ -160,9 +160,9 @@ def main():
     #attachment_files = mail_data.get("files", [])
     attachment_files = []
 
-    for email_data in mail_data:
-        files = email_data.get("files", [])
-        attachment_files.extend(files)
+    # ✅ It's a single dict now, not a list
+    attachment_files = mail_data.get("files", [])
+    email_subject = mail_data.get("email_subject", "NMD Emirates")
 
     print("Total attachments:", attachment_files)
 

@@ -25,8 +25,7 @@ def fetch_unread_mbd_emirates_attachments():
     if not email_ids:
         raise Exception("No unread emails found")
 
-    all_results = []
-
+    # ✅ Iterate one at a time — stop at the first matching email
     for email_id in reversed(email_ids):
         status, msg_data = mail.fetch(email_id, "(RFC822)")
         msg = email.message_from_bytes(msg_data[0][1])
@@ -70,21 +69,18 @@ def fetch_unread_mbd_emirates_attachments():
                 saved_files.append(file_path)
                 print(f"📎 Saved attachment: {file_path}")
 
-        if saved_files:
-            all_results.append({
-                "email_subject": subject,
-                "folder_path": unique_folder,
-                "files": saved_files
-            })
+        # ✅ Mark as SEEN only after successful processing
+        mail.store(email_id, '+FLAGS', '\\Seen')
 
-            # Mark email as SEEN only after successful processing
-            mail.store(email_id, '+FLAGS', '\\Seen')
+        # ✅ Return immediately after processing the ONE matched email
+        return {
+            "email_subject": subject,
+            "folder_path": unique_folder,
+            "files": saved_files
+        }
 
-    if not all_results:
-        raise Exception("No unread emails found with subject 'NMD emirates' and attachments")
-
-    return all_results
-
+    # No matching email found after checking all unread
+    raise Exception("No unread emails found with subject 'NMD emirates'")
 
 
 # ===============================
