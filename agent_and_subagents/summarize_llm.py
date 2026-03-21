@@ -61,8 +61,7 @@ plural vs singular, Ltd vs Limited, Pvt vs Private, spacing) → FAIL.
 
 CRITICAL: Every check object in "results" MUST contain ALL its defined fields.
 Never omit "detail", "severity", "short_brief", "discrepancy", or "documents"
-even if the value is null or the document is missing.
-If a field cannot be filled, write null — do NOT drop the key entirely.
+
 
 
 ═══════════════════════════════════════════════════════════════
