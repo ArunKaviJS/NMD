@@ -22,9 +22,8 @@ GLOBAL CALCULATION RULES — APPLY TO EVERY CHECK — NON-NEGOTIABLE
 
 RULE G1 — STATUS FIELD ALWAYS LAST:
 Every check object must have "status" as the LAST field.
-You must fill ALL other fields (values, documents_compared, details)
-BEFORE writing the status field.
-Never write status first.
+Fill ALL other fields (values, documents_compared, details)
+BEFORE writing the status field. Never write status first.
 
 RULE G2 — STATUS MUST MATCH EVIDENCE:
 After writing details, read back your own details and values.
@@ -51,7 +50,8 @@ RULE G5 — NEVER CONTRADICT YOURSELF:
 Never write "X matches Y" in details if X ≠ Y.
 Never write status = PASS if difference ≠ 0.00.
 Never write status = MATCH if documents show different values.
-Self-check: read back calculated value and stated value digit by digit before assigning status.
+Self-check: read back calculated value and stated value digit by digit
+before assigning status.
 
 RULE G6 — NAME CONSISTENCY:
 For identity checks, compare strings exactly character by character.
@@ -60,14 +60,46 @@ plural vs singular, Ltd vs Limited, Pvt vs Private, spacing) → FAIL.
 
 RULE G7 — NEVER DROP A FIELD:
 Every key defined in a check object MUST appear in your output.
-If a value cannot be determined because a document is missing or a field
-is absent, write null (for extracted fields) or
+If a value cannot be determined because a document is missing or a
+field is absent, write null (for extracted fields) or
 "UNABLE TO CHECK — document missing" (for comparison status fields).
 Dropping a key entirely is a structural violation — never do it.
 
-CRITICAL: Every check object in "results" MUST contain ALL its defined fields.
-Never omit "detail", "severity", "short_brief", "discrepancy", or "documents"
+═══════════════════════════════════════════════════════════════
+FIELD OWNERSHIP TABLE — WHICH FIELDS BELONG TO WHICH CHECKS
+═══════════════════════════════════════════════════════════════
 
+Every check object contains "name", "detail", "severity", "status".
+"status" is ALWAYS the last field.
+
+In ADDITION, the following checks carry EXTRA fields as shown.
+Only add these extra fields to the checks listed — never add them
+to other checks.
+
+  CHECK NAME                        EXTRA FIELDS REQUIRED
+  ─────────────────────────────────────────────────────────
+  Exporter Name                   → "discrepancy"
+  Importer / Consignee            → "discrepancy"
+  LC Amount vs Invoice CIF        → "short_brief"
+  Invoice Arithmetic — FOB        → "short_brief"
+  Invoice Arithmetic — CIF        → "short_brief"
+  Insurance Coverage Check        → "short_brief"
+  BOE Amount vs Invoice CIF       → "short_brief"
+  Presentation Period             → "short_brief"
+  Stale B/L Check                 → "short_brief"
+  LC Required Documents Checklist → "documents", "short_brief"
+  ─────────────────────────────────────────────────────────
+
+FIELD POSITION RULES:
+  - "discrepancy" appears immediately after "detail"
+  - "short_brief"  appears immediately after "detail"
+    (or after "discrepancy" if both are present)
+  - "documents"    appears immediately after "short_brief"
+  - "severity"     always second-to-last
+  - "status"       always last
+
+ALL other 20 checks contain ONLY: "name", "detail", "severity", "status"
+Do NOT add "short_brief", "discrepancy", or "documents" to those checks.
 
 ═══════════════════════════════════════════════════════════════
 MANDATORY CHECKS LIST — ALL 30 MUST APPEAR IN OUTPUT
@@ -112,13 +144,39 @@ present by ticking each one off this list in order:
   30. Third Party Documents
 
 If a check cannot be run because a document is missing, still include
-the check object with all its fields and set:
+the check object with all its required fields and set:
   "detail": "UNABLE TO CHECK — [document name] not provided."
   "severity": null
   "status": "UNABLE TO CHECK"
+For checks with extra fields (see FIELD OWNERSHIP TABLE):
+  "discrepancy": "UNABLE TO CHECK — document missing"
+  "short_brief":  "UNABLE TO CHECK — document missing"
+  "documents":    [] (empty array)
 
 Omitting a check entirely is a structural violation.
 A result with fewer than 30 objects in the "results" array is INVALID.
+
+═══════════════════════════════════════════════════════════════
+HOW TO COMPUTE overall_verdict AND total_failed
+═══════════════════════════════════════════════════════════════
+
+After completing all 30 checks:
+
+  total_failed  = count of check objects where status is
+                  FAIL, NOT MATCH, or NON-CONFORMING
+  total_passed  = count of check objects where status is
+                  PASS or MATCH
+  total_unable  = count of check objects where status is
+                  UNABLE TO CHECK
+
+  overall_verdict:
+    "CLEAN PRESENTATION"      if total_failed = 0
+    "DISCREPANT PRESENTATION" if total_failed > 0
+
+  overall_summary:
+    2-3 sentence plain English summary.
+    State: total checks run (30), total_passed, total_failed,
+    total_unable, and name every failed check explicitly.
 
 ═══════════════════════════════════════════════════════════════
 PART 1 — STRUCTURED FIELD EXTRACTION
@@ -142,15 +200,19 @@ OUTPUT FORMAT — SINGLE FLAT JSON OBJECT
 
 CRITICAL OUTPUT RULES:
 - Return ONE single flat JSON object — NO nested objects anywhere.
-- "status" field MUST be the LAST field in every logical check group.
+- "status" field MUST be the LAST field in every check object.
 - Every value must be a plain string (or array of plain strings).
-- Arrays (lc_required_documents, lc_special_conditions, bl_container_numbers,
-  missing_documents) must contain plain strings only — NO objects inside arrays.
-- Return ONLY the JSON below. No text before or after.
-- Do NOT fill any status field until ALL other fields in that check group are complete.
-- Do NOT skip any field. Every key listed below MUST appear in your output.
-- Every check object in "results" MUST contain ALL its defined fields.
-- Never omit "detail", "severity", "short_brief", "discrepancy", or "documents"
+- Arrays (lc_required_documents, lc_special_conditions,
+  bl_container_numbers) must contain plain strings only —
+  NO objects inside arrays.
+- The "documents" array inside LC Required Documents Checklist
+  is the ONLY array that contains objects — this is intentional.
+- Return ONLY the JSON. No text before or after.
+- Do NOT fill any status field until ALL other fields in that
+  check group are complete.
+- Do NOT add fields to a check that are not listed in the
+  FIELD OWNERSHIP TABLE for that check.
+- Do NOT omit fields that ARE listed in the FIELD OWNERSHIP TABLE.
 
 {
   "Extracted_results": {
@@ -338,20 +400,23 @@ CRITICAL OUTPUT RULES:
     }
   },
   "Comparison_results": {
+    "total_passed": "FILL: count of checks with status PASS or MATCH",
+    "total_failed": "FILL: count of checks with status FAIL, NOT MATCH, or NON-CONFORMING",
+    "total_unable": "FILL: count of checks with status UNABLE TO CHECK",
     "overall_verdict": "FILL: CLEAN PRESENTATION if total_failed = 0 | DISCREPANT PRESENTATION if total_failed > 0",
-    "overall_summary": "FILL: 2-3 sentence plain English summary — state total checks run, how many passed, how many failed, list the critical findings by name",
+    "overall_summary": "FILL: 2-3 sentence plain English summary — state total checks run (30), total_passed, total_failed, total_unable, and list every failed check by name explicitly",
     "results": [
       {
         "name": "Exporter Name",
         "detail": "FILL: Copy exact exporter/shipper/assured/client name from each document — Invoice=[exact value], Packing List=[exact value], B/L shipper=[exact value], COO=[exact value], Insurance assured=[exact value], Inspection client=[exact value], BOE drawer=[exact value]. Do not normalize or abbreviate any value.",
-        "discrepancy": "FILL: If MATCH — write 'All 7 documents show identical exporter name: [exact name].' If NOT MATCH — list every document that differs.",
+        "discrepancy": "FILL: If MATCH — write 'All 7 documents show identical exporter name: [exact name].' If NOT MATCH — list every document that differs and its exact value.",
         "severity": "FILL: MAJOR if NOT MATCH | null if MATCH",
         "status": "FILL: MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Importer / Consignee",
         "detail": "FILL: Copy exact consignee name from each document — Invoice=[exact value], B/L=[exact value], COO=[exact value], Insurance beneficiary/notify=[exact value], Inspection consignee=[exact value]. Do not normalize or abbreviate any value.",
-        "discrepancy": "FILL: If MATCH — write 'All 5 documents show identical importer/consignee name: [exact name].' If NOT MATCH — list every document that differs.",
+        "discrepancy": "FILL: If MATCH — write 'All 5 documents show identical importer/consignee name: [exact name].' If NOT MATCH — list every document that differs and its exact value.",
         "severity": "FILL: MAJOR if NOT MATCH | null if MATCH",
         "status": "FILL: MATCH or NOT MATCH or UNABLE TO CHECK"
       },
@@ -371,28 +436,28 @@ CRITICAL OUTPUT RULES:
       },
       {
         "name": "Invoice Arithmetic — CIF",
-        "detail": "FILL: Step 1 — Extract: invoice_fob=[raw number], invoice_freight=[raw number], invoice_insurance=[raw number]. Step 2 — Calculate sum. Step 3 — invoice_total_cif_stated=[raw number]. Step 4 — difference = calculated - stated.",
+        "detail": "FILL: Step 1 — Extract: invoice_fob=[raw number], invoice_freight=[raw number], invoice_insurance=[raw number]. Step 2 — calculated_cif = invoice_fob + invoice_freight + invoice_insurance — show arithmetic. Step 3 — invoice_total_cif_stated=[raw number]. Step 4 — difference = calculated_cif - invoice_total_cif_stated.",
         "short_brief": "FILL: 'FOB: [value] + Freight: [value] + Insurance: [value] = Calculated CIF: [value] | Invoice CIF: [value] | Difference: [show sign] | [CORRECT or INCORRECT]'",
         "severity": "FILL: MAJOR if FAIL | null if PASS",
         "status": "FILL: PASS if difference ≤ 1.00 | FAIL if difference > 1.00"
       },
       {
         "name": "Insurance Coverage Check",
-        "detail": "FILL: Step 1 — insurance_sum_insured=[raw number], invoice_total_cif=[raw number]. Step 2 — coverage% = (sum_insured ÷ invoice_total_cif) × 100. Step 3 — Required minimum: 110%. Step 4 — expected_sum_insured = invoice_total_cif × 1.10. Step 5 — difference = actual - expected.",
+        "detail": "FILL: Step 1 — insurance_sum_insured=[raw number], invoice_total_cif=[raw number]. Step 2 — coverage% = (sum_insured ÷ invoice_total_cif) × 100 — show arithmetic. Step 3 — Required minimum: 110%. Step 4 — expected_sum_insured = invoice_total_cif × 1.10 — show arithmetic. Step 5 — difference = insurance_sum_insured - expected_sum_insured.",
         "short_brief": "FILL: 'Invoice CIF: [value] | Required Min (110%): [value] | Actual Sum Insured: [value] | Coverage: [calculated]% | Difference: [show sign] | [ADEQUATE or INADEQUATE]'",
         "severity": "FILL: CRITICAL if FAIL | null if PASS",
         "status": "FILL: PASS if coverage% >= 110% | FAIL if coverage% < 110% | UNABLE TO CHECK"
       },
       {
         "name": "BOE Amount vs Invoice CIF",
-        "detail": "FILL: Step 1 — boe_amount=[raw number], invoice_total_cif=[raw number]. Step 2 — difference = boe_amount - invoice_total_cif.",
+        "detail": "FILL: Step 1 — boe_amount=[raw number], invoice_total_cif=[raw number]. Step 2 — difference = boe_amount - invoice_total_cif — show arithmetic.",
         "short_brief": "FILL: 'BOE Amount: [value] | Invoice CIF: [value] | Difference: [show sign] | [MATCH or NOT MATCH]'",
         "severity": "FILL: CRITICAL if FAIL | null if PASS",
         "status": "FILL: PASS if difference = 0.00 | FAIL if difference ≠ 0.00 | UNABLE TO CHECK"
       },
       {
         "name": "Incoterm Consistency",
-        "detail": "FILL: Invoice incoterm=[exact value], B/L incoterm=[exact value], LC incoterm=[exact value]. If ALL identical → 'All 3 documents show the same incoterm: [value].' Note: CFR and CIF are different — flag explicitly if mixed.",
+        "detail": "FILL: Invoice incoterm=[exact value], B/L incoterm=[exact value], LC incoterm=[exact value]. Compare all three exactly. If ALL identical → 'All 3 documents show the same incoterm: [value].' Note: CFR and CIF are different terms — flag explicitly if mixed.",
         "severity": "FILL: MAJOR if NOT MATCH | null if MATCH",
         "status": "FILL: MATCH or NOT MATCH or UNABLE TO CHECK"
       },
@@ -434,7 +499,7 @@ CRITICAL OUTPUT RULES:
       },
       {
         "name": "Net Weight",
-        "detail": "FILL: Invoice=[exact value], Packing List=[exact value], B/L=[exact value], Inspection=[exact value]. Step 1 — variance_mt = |inspection_net_weight - invoice_net_weight|. Step 2 — variance% = (variance_mt ÷ invoice_net_weight) × 100. Show arithmetic explicitly.",
+        "detail": "FILL: Invoice=[exact value], Packing List=[exact value], B/L=[exact value], Inspection=[exact value]. Step 1 — variance_mt = |inspection_net_weight - invoice_net_weight| — show arithmetic. Step 2 — variance% = (variance_mt ÷ invoice_net_weight) × 100 — show arithmetic.",
         "severity": "FILL: MAJOR if variance > 0.5% and non-inspection doc differs | MINOR if only inspection variance > 0.5% | null if all match",
         "status": "FILL: MATCH if all identical | WARNING if inspection variance > 0.5% | NOT MATCH if non-inspection documents differ | UNABLE TO CHECK"
       },
@@ -446,7 +511,7 @@ CRITICAL OUTPUT RULES:
       },
       {
         "name": "Commodity Description",
-        "detail": "FILL: LC required commodity description=[exact wording]. Invoice goods description=[exact wording]. Compare attribute by attribute. List missing or NOT MATCHed attributes.",
+        "detail": "FILL: LC required commodity description=[exact wording]. Invoice goods description=[exact wording]. Compare attribute by attribute. List any missing or mismatched attributes explicitly.",
         "severity": "FILL: MAJOR if NOT MATCH | null if MATCH",
         "status": "FILL: MATCH or NOT MATCH or UNABLE TO CHECK"
       },
@@ -488,26 +553,28 @@ CRITICAL OUTPUT RULES:
       },
       {
         "name": "Date — All Documents vs LC Expiry",
-        "detail": "FILL: lc_expiry_date=[value]. Check each document's primary date: Commercial Invoice=[date] [PASS/FAIL], Bill of Lading=[date] [PASS/FAIL], COO=[date] [PASS/FAIL], Insurance=[date] [PASS/FAIL], Inspection=[date] [PASS/FAIL], BOE=[date] [PASS/FAIL], Packing List=[date] [PASS/FAIL].",
-        "severity": "FILL: CRITICAL if any document exceeds LC expiry | null if all within",
-        "status": "FILL: PASS if all dates <= lc_expiry | FAIL if any date > lc_expiry | UNABLE TO CHECK"
+        "detail": "FILL: lc_expiry_date=[value]. Check each document's primary date: Commercial Invoice=[date] [PASS/FAIL], Bill of Lading=[date] [PASS/FAIL], COO=[date] [PASS/FAIL], Insurance=[date] [PASS/FAIL], Inspection=[date] [PASS/FAIL], BOE=[date] [PASS/FAIL], Packing List=[date] [PASS/FAIL]. Any document dated after lc_expiry_date is a FAIL.",
+        "severity": "FILL: CRITICAL if any document date exceeds LC expiry | null if all within",
+        "status": "FILL: PASS if all document dates <= lc_expiry_date | FAIL if any document date > lc_expiry_date | UNABLE TO CHECK"
       },
       {
         "name": "Presentation Period",
-        "detail": "FILL: Step 1 — presentation_deadline = bl_on_board_date + 21 days. Step 2 — today_ist = current IST date. Step 3 — days_remaining = presentation_deadline - today_ist. Step 4 — check today_ist <= lc_expiry_date.",
+        "detail": "FILL: Step 1 — presentation_deadline = bl_on_board_date + 21 days — state result date. Step 2 — today_ist = current IST date. Step 3 — days_remaining = presentation_deadline - today_ist — show arithmetic. Step 4 — check today_ist <= lc_expiry_date.",
         "short_brief": "FILL: 'B/L On Board: [value] | Presentation Deadline (21d): [value] | LC Expiry: [value] | Today (IST): [value] | Days to Deadline: [show sign e.g. +5 or -3] | Days to Expiry: [show sign] | [WITHIN WINDOW or DEADLINE BREACHED or EXPIRY BREACHED or BOTH BREACHED]'",
         "severity": "FILL: CRITICAL if FAIL | null if PASS",
-        "status": "FILL: PASS if today_ist <= presentation_deadline AND today_ist <= lc_expiry | FAIL if either condition breached | UNABLE TO CHECK"
+        "status": "FILL: PASS if today_ist <= presentation_deadline AND today_ist <= lc_expiry_date | FAIL if either condition breached | UNABLE TO CHECK"
       },
       {
         "name": "Stale B/L Check",
-        "detail": "FILL: Step 1 — stale_deadline = bl_on_board_date + 21 days. Step 2 — today_ist = current IST date. Step 3 — days_elapsed = today_ist - bl_on_board_date. Step 4 — days_until_stale = stale_deadline - today_ist.",
+        "detail": "FILL: Step 1 — stale_deadline = bl_on_board_date + 21 days — state result date. Step 2 — today_ist = current IST date. Step 3 — days_elapsed = today_ist - bl_on_board_date — show arithmetic. Step 4 — days_until_stale = stale_deadline - today_ist — show arithmetic.",
         "short_brief": "FILL: 'B/L On Board: [value] | Stale Deadline (21d): [value] | Today (IST): [value] | Days Elapsed: [value] | Days Until Stale: [show sign e.g. +8 or -3] | [NOT STALE or STALE]'",
         "severity": "FILL: MAJOR if FAIL | null if PASS",
         "status": "FILL: PASS if today_ist <= stale_deadline | FAIL if today_ist > stale_deadline | UNABLE TO CHECK"
       },
       {
         "name": "LC Required Documents Checklist",
+        "detail": "FILL: Total documents required by LC=[count]. For each document state: [doc_number] [required name] → [PRESENT/MISSING/NON-CONFORMING] — [which file satisfies it or why it fails]. Conclude with: Total PRESENT=[count], Total MISSING=[count], Total NON-CONFORMING=[count].",
+        "short_brief": "FILL: 'Total Required: [value] | Present: [value] | Missing: [value] | Non-Conforming: [value] | Missing/Non-Conforming Items: [list names or NONE] | [ALL DOCUMENTS PRESENT or DISCREPANCY FOUND]'",
         "documents": [
           {
             "doc_number": "01",
@@ -552,52 +619,63 @@ CRITICAL OUTPUT RULES:
             "status": "FILL: PRESENT or MISSING or NON-CONFORMING"
           }
         ],
-        "severity": "FILL: MAJOR if any MISSING or NON-CONFORMING | null if all PRESENT",    
-        "detail": "FILL: List total documents required by LC=[count]. For each document state: [doc_number] [required name] → [PRESENT/MISSING/NON-CONFORMING] — [which file satisfies it or why it fails]. Conclude with: Total PRESENT=[count], Total MISSING=[count], Total NON-CONFORMING=[count].",
-        "short_brief": "FILL: 'Total Required: [value] | Present: [value] | Missing: [value] | Non-Conforming: [value] | Missing/Non-Conforming Items: [list names or NONE] | [ALL DOCUMENTS PRESENT or DISCREPANCY FOUND]'",
+        "severity": "FILL: MAJOR if any MISSING or NON-CONFORMING | null if all PRESENT",
         "status": "FILL: PASS if all PRESENT | FAIL if any MISSING or NON-CONFORMING"
       },
       {
         "name": "Partial Shipment",
         "detail": "FILL: lc_partial_shipment=[exact LC value]. Number of B/L sets presented=[count]. State whether compliant or non-compliant with reason.",
-        "severity": "FILL: MAJOR if FAIL | null if PASS ",
+        "severity": "FILL: MAJOR if FAIL | null if PASS",
         "status": "FILL: PASS if NOT ALLOWED and single B/L | FAIL if NOT ALLOWED and multiple B/Ls | PASS if ALLOWED | UNABLE TO CHECK"
       },
       {
         "name": "Transhipment",
         "detail": "FILL: lc_transhipment=[exact LC value]. B/L routing=[direct voyage or via transhipment port]. State whether compliant or non-compliant with reason.",
-        "severity": "FILL: MAJOR if FAIL | null if PASS ",
+        "severity": "FILL: MAJOR if FAIL | null if PASS",
         "status": "FILL: PASS if NOT ALLOWED and direct voyage | FAIL if NOT ALLOWED and transhipment shown | PASS if ALLOWED | UNABLE TO CHECK"
       },
       {
         "name": "Third Party Documents",
         "detail": "FILL: LC clause on third-party documents=[exact LC clause or 'No restriction stated']. Inspection certificate issuing body=[exact value]. State whether issuer is acceptable per LC terms.",
-        "severity": "FILL: MAJOR if FAIL | null if PASS ",
+        "severity": "FILL: MAJOR if FAIL | null if PASS",
         "status": "FILL: PASS if issuer meets LC requirement | FAIL if issuer does not meet LC requirement | PASS if no restriction stated | UNABLE TO CHECK"
       }
     ]
   }
 }
 
-
 ═══════════════════════════════════════════════════════════════
 SELF-CHECK BEFORE RETURNING OUTPUT — MANDATORY
 ═══════════════════════════════════════════════════════════════
 
 Before closing the results array, scan every check object and confirm:
-[ ] All 30 check names from the MANDATORY CHECKS LIST are present
+
+STRUCTURE CHECKS:
 [ ] Results array has exactly 30 objects — count them
-[ ] "name" present on every object
-[ ] "detail" present — never null, always filled
-[ ] "short_brief" present on all 8 required checks (see FIELD OWNERSHIP)
-[ ] "discrepancy" present on Exporter Name and Importer / Consignee
-[ ] "documents" array present and fully filled on LC Required Documents Checklist
-[ ] "severity" present — never omitted
-[ ] "status" is the LAST field in every object
-[ ] No check object ends immediately after the "documents" array closes
+[ ] All 30 check names from the MANDATORY CHECKS LIST are present
+    in the correct order
+[ ] No check object is missing or has been merged with another
+
+FIELD PRESENCE CHECKS (per FIELD OWNERSHIP TABLE):
+[ ] "name"    — present on all 30 check objects
+[ ] "detail"  — present on all 30 check objects, never null
+[ ] "discrepancy" — present on checks 01 and 02 ONLY
+[ ] "short_brief" — present on checks 03,04,05,06,07,25,26,27 ONLY
+[ ] "documents" array — present on check 27 ONLY, fully populated
+[ ] "severity"  — present on all 30 check objects
+[ ] "status"    — present on all 30 check objects and is the LAST field
+
+ARITHMETIC CHECKS:
+[ ] Every financial calculation shows explicit arithmetic (RULE G3)
+[ ] Every numeric comparison shows explicit difference calculation (RULE G4)
+[ ] No status = PASS where difference ≠ 0.00 (RULE G5)
+
+COUNTING CHECKS:
+[ ] total_passed, total_failed, total_unable are computed and correct
+[ ] overall_verdict matches total_failed
 
 If any check is missing — insert it before returning output.
-If results array count is not 30 — something was skipped, find and add it.
+If results array count is not 30 — find the missing check and add it.
 Returning output with fewer than 30 checks is a structural violation.
 """
 class SummarizeLLM:
@@ -629,52 +707,68 @@ class SummarizeLLM:
         return json.loads(match.group(0))
 
     def extract(self, payload: dict) -> dict:
-        documents = payload.get("documents", [])
-        missing_documents = payload.get("missing_documents", [])
-        """
-        Send normalized document data to LLM and get structured JSON output
-        ready for MongoDB storage.
-        """
+      documents = payload.get("documents", [])
+      missing_documents = payload.get("missing_documents", [])
 
-        response = self.client.chat.completions.create(
-        model=self.deployment,
-        temperature=0,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps({
-                    "documents": documents,
-                    "missing_documents": missing_documents
-                })
-            }
-        ],
-    )
+      """
+      Send normalized document data to LLM and get structured JSON output
+      ready for MongoDB storage.
+      """
 
+      response = self.client.chat.completions.create(
+          model=self.deployment,
+          temperature=0,
+          max_tokens=8000,          # ← CRITICAL: must be high enough for full 30-check JSON
+          response_format={"type": "json_object"},   # ← forces valid JSON output (Azure OpenAI GPT-4o/turbo)
+          messages=[
+              {"role": "system", "content": SYSTEM_PROMPT},
+              {
+                  "role": "user",
+                  "content": json.dumps({
+                      "documents": documents,
+                      "missing_documents": missing_documents
+                  })
+              }
+          ],
+      )
 
-        raw_output = response.choices[0].message.content.strip()
+      raw_output = response.choices[0].message.content.strip()
 
-        # Debug / audit log
-        print("\n🏦 TRADE FINANCE COMPLIANCE SUMMARY:\n")
-        print(raw_output)
+      # Debug / audit log
+      print("\n🏦 TRADE FINANCE COMPLIANCE SUMMARY:\n")
+      print(raw_output)
 
-        # Parse into dict (safe)
-        parsed_output = self._safe_json_parse(raw_output)
-        parsed_output["MissingDocuments"] = (
-        missing_documents if missing_documents else ["No missing documents noted"]
-    )
+      # Check if output was truncated (finish_reason != "stop" means cut off)
+      finish_reason = response.choices[0].finish_reason
+      if finish_reason != "stop":
+          raise ValueError(
+              f"LLM output was truncated (finish_reason='{finish_reason}'). "
+              f"Increase max_tokens or reduce input size."
+          )
 
+      # Parse into dict (safe)
+      parsed_output = self._safe_json_parse(raw_output)
 
-        # Ensure keys exist and are correct types
-        required_keys = [
-            "overallStatus",
-            "summary",
-            "lcValidationSummary",
-            "detailedFindings",
-            "missingDocuments",
-        ]
-        for key in required_keys:
-            if key not in parsed_output:
-                parsed_output[key] = {} if key == "detailedFindings" else []
+      # Attach missing documents under correct key matching prompt output schema
+      parsed_output["missing_documents"] = (
+          missing_documents if missing_documents else []
+      )
 
-        return parsed_output
+      # Validate correct top-level keys from prompt output schema
+      required_keys = ["Extracted_results", "Comparison_results"]
+      for key in required_keys:
+          if key not in parsed_output:
+              raise ValueError(
+                  f"LLM output is missing required top-level key: '{key}'. "
+                  f"Keys found: {list(parsed_output.keys())}"
+              )
+
+      # Validate 30 checks are present
+      results = parsed_output.get("Comparison_results", {}).get("results", [])
+      if len(results) != 30:
+          raise ValueError(
+              f"Expected 30 compliance checks in results array, got {len(results)}. "
+              f"Output may have been truncated or prompt not followed."
+          )
+
+      return parsed_output
