@@ -22,8 +22,6 @@ from email_and_mongo.email_attachment_fetcher import fetch_unread_mbd_emirates_a
 load_dotenv()
 
 
-
-
 # Load AWS credentials from env
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
@@ -64,71 +62,56 @@ def run_azure_ocr_local(file_path: str) -> str:
     try:
         print(f"📄 Reading local file: {file_path}")
 
-        # Read and encode file as base64
         with open(file_path, "rb") as f:
             file_bytes = f.read()
 
         base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
 
-        # Determine media type based on file extension
         ext = os.path.splitext(file_path)[1].lower()
         media_type_map = {
-            ".pdf": "application/pdf",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
+            ".pdf":  "application/pdf",
+            ".png":  "image/png",
+            ".jpg":  "image/jpeg",
             ".jpeg": "image/jpeg",
             ".tiff": "image/tiff",
-            ".tif": "image/tiff",
+            ".tif":  "image/tiff",
             ".webp": "image/webp",
         }
         media_type = media_type_map.get(ext, "application/pdf")
 
-        # Build the source block based on media type
         if media_type == "application/pdf":
-            source_block = {
-                "type": "base64",
-                "media_type": media_type,
-                "data": base64_data
-            }
             content_block = {
                 "type": "document",
-                "source": source_block
+                "source": {"type": "base64", "media_type": media_type, "data": base64_data}
             }
         else:
-            source_block = {
-                "type": "base64",
-                "media_type": media_type,
-                "data": base64_data
-            }
             content_block = {
                 "type": "image",
-                "source": source_block
+                "source": {"type": "base64", "media_type": media_type, "data": base64_data}
             }
 
         payload = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 8096,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        content_block,
-                        {
-                            "type": "text",
-                            "text": (
-                                "You are a document OCR engine. "
-                                "Extract and return ALL text content from this document exactly as it appears. "
-                                "Preserve the layout, tables, labels, values, line breaks, and structure as closely as possible. "
-                                "Do not summarize, interpret, or omit any content. "
-                                "Output only the raw extracted text with no additional commentary."
-                            )
-                        }
-                    ]
-                }
-            ]
+            "messages": [{
+                "role": "user",
+                "content": [
+                    content_block,
+                    {
+                        "type": "text",
+                        "text": (
+                            "You are a document OCR engine. "
+                            "Extract and return ALL text content from this document exactly as it appears. "
+                            "Preserve the layout, tables, labels, values, line breaks, and structure as closely as possible. "
+                            "Do not summarize, interpret, or omit any content. "
+                            "Output only the raw extracted text with no additional commentary."
+                        )
+                    }
+                ]
+            }]
         }
 
-        print(f"🤖 Sending to Claude Sonnet via Bedrock...")
+        print("🤖 Sending to Claude Sonnet via Bedrock...")
 
         response = bedrock_client.invoke_model(
             modelId="global.anthropic.claude-sonnet-4-6",
@@ -141,30 +124,19 @@ def run_azure_ocr_local(file_path: str) -> str:
         raw_content = result["content"][0]["text"]
 
         print(f"✅ Claude OCR complete. Extracted {len(raw_content)} characters")
-        print("raw_content", raw_content)
-
         return raw_content
 
     except Exception as e:
         print(f"❌ Claude Bedrock OCR error: {e}")
         traceback.print_exc()
         return ""
-#============
-# Example usage
-# ===============================
+
+
 def main():
-    # --------------------------------
-    # Step 1: Fetch unread email attachments
-    # --------------------------------
+    # ── Step 1: Fetch unread email attachments ─────────────────────
     mail_data = fetch_unread_mbd_emirates_attachments()
-    #attachment_files = mail_data.get("files", [])
-    attachment_files = []
-
-    # ✅ It's a single dict now, not a list
     attachment_files = mail_data.get("files", [])
-    email_subject = mail_data.get("email_subject", "NMD Emirates")
-
-    print("Total attachments:", attachment_files)
+    email_subject    = mail_data.get("email_subject", "NMD Emirates")
 
     print(f"📂 Processing {len(attachment_files)} attachment(s)")
 
@@ -172,107 +144,80 @@ def main():
         print("⚠️ No attachments found. Exiting.")
         return {}
 
-    # --------------------------------
-    # Step 2: Initialize classifier
-    # --------------------------------
+    # ── Step 2: Initialize classifier ─────────────────────────────
     classifier = DocumentTypeClassifier()
 
-    # --------------------------------
-    # Step 3: FINAL OUTPUT CONTAINER
-    # --------------------------------
-    final_llm_results = []
-
-    # --------------------------------
-    # Step 4: Process each attachment
-    # --------------------------------
+    # ── Step 3: Output containers ──────────────────────────────────
+    #   final_llm_results  → passed to SummarizeLLM as "extracted_results"
+    final_llm_results  = []
     uploaded_doc_types = set()
-    
-    # --------------------------------
-    # Step 5: collect unrecognised file names here
-    # --------------------------------
-    unexpected_files = []   
+    unexpected_files   = []
+    extracted_data     = None
+    doc_type           = None
 
-
+    # ── Step 4: Process each attachment ───────────────────────────
     for file_path in attachment_files:
         print(f"\n📄 Processing file: {file_path}")
 
         normalized_doc = run_azure_ocr_local(file_path)
-
         if not normalized_doc:
-            print("⚠️ Skipping empty Textract result")
+            print("⚠️ Skipping empty OCR result")
             continue
 
-         # Classify — catch anything the classifier doesn't recognise
         try:
             doc_type = classifier.classify(normalized_doc)
         except ValueError as e:
             file_name = os.path.basename(file_path)
             print(f"⚠️ Unclassified document skipped: {file_name} — {e}")
             unexpected_files.append(file_name)
-            continue  # skip extraction entirely for this file
+            continue
+
         print("📌 Document Type:", doc_type)
-        
-        
 
         if doc_type in EXPECTED_DOCUMENT_TYPES:
             uploaded_doc_types.add(doc_type)
 
         extracted_data = None
 
-        if doc_type == "INVOICE":
-            extracted_data = InvoiceLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "LETTER_OF_CREDIT":
-            extracted_data = LetterOfCreditLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "CERTIFICATE_OF_ORIGIN":
-            extracted_data = CertificateOfOriginLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "BILL_OF_EXCHANGE":
-            extracted_data = BillOfExchangeLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "BILL_OF_LADING":
-            extracted_data = BillOfLadingLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "INSPECTION_CERTIFICATE":
-            extracted_data = InspectionCertificateLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "INSURANCE_CERTIFICATE":
-            extracted_data = InsuranceCertificateLLMExtractor().extract(normalized_doc)
-
-        elif doc_type == "PACKING_LIST":
-            extracted_data = PackingListLLMExtractor().extract(normalized_doc)
-
+        if   doc_type == "INVOICE":                extracted_data = InvoiceLLMExtractor().extract(normalized_doc)
+        elif doc_type == "LETTER_OF_CREDIT":       extracted_data = LetterOfCreditLLMExtractor().extract(normalized_doc)
+        elif doc_type == "CERTIFICATE_OF_ORIGIN":  extracted_data = CertificateOfOriginLLMExtractor().extract(normalized_doc)
+        elif doc_type == "BILL_OF_EXCHANGE":       extracted_data = BillOfExchangeLLMExtractor().extract(normalized_doc)
+        elif doc_type == "BILL_OF_LADING":         extracted_data = BillOfLadingLLMExtractor().extract(normalized_doc)
+        elif doc_type == "INSPECTION_CERTIFICATE": extracted_data = InspectionCertificateLLMExtractor().extract(normalized_doc)
+        elif doc_type == "INSURANCE_CERTIFICATE":  extracted_data = InsuranceCertificateLLMExtractor().extract(normalized_doc)
+        elif doc_type == "PACKING_LIST":           extracted_data = PackingListLLMExtractor().extract(normalized_doc)
         else:
             print("ℹ️ No extractor configured for this document type")
 
-        
+        # ── KEY CHANGE: list is called "extracted_results" ────────
         final_llm_results.append({
-            "file_name": os.path.basename(file_path),
-            "doc_type": doc_type,
+            "file_name":      os.path.basename(file_path),
+            "doc_type":       doc_type,
             "extracted_data": extracted_data
         })
-        
+
+    # ── Step 5: Build missing documents list ──────────────────────
     missing_documents = [
-    EXPECTED_DOCUMENT_TYPES[doc]
-    for doc in EXPECTED_DOCUMENT_TYPES
-    if doc not in uploaded_doc_types
+        EXPECTED_DOCUMENT_TYPES[doc]
+        for doc in EXPECTED_DOCUMENT_TYPES
+        if doc not in uploaded_doc_types
     ]
 
-    print('extracted_text',extracted_data)
-    print('doctype*****',doc_type)
-    print('final llm results',final_llm_results)
-    # --------------------------------
-    # Step 5: Summarize (LC vs Docs)
-    # --------------------------------
-    print("\n🧾 Running Trade Finance Summary LLM...")
+    print("extracted_data:", extracted_data)
+    print("doc_type:", doc_type)
+    print("final_llm_results:", final_llm_results)
+
+    # ── Step 6: Two-call Summarize LLM ────────────────────────────
+    #   payload key is now "extracted_results" (not "documents")
+    print("\n🧾 Running Trade Finance Summary LLM (2 calls)...")
     summarized_data = SummarizeLLM().extract({
-            "documents": final_llm_results,
-            "missing_documents": missing_documents
-        })
+        "extracted_results": final_llm_results,   # ← updated key
+        "missing_documents": missing_documents
+    })
 
+    # ── Step 7: Merge PDF & upload to S3 ──────────────────────────
     print("\n📦 Creating merged PDF & uploading to S3...")
-
     merge_result = merge_pdfs_unique_and_upload(
         attachments=attachment_files,
         folder_path=local_working_folder,
@@ -282,38 +227,33 @@ def main():
         aws_secret_key=AWS_SECRET_KEY,
         aws_region=REGION
     )
+    print("\n✅ MERGED PDF RESULT:", merge_result)
 
-    print("\n✅ MERGED PDF RESULT")
-    print(merge_result)
-    
+    # ── Step 8: Store in MongoDB ───────────────────────────────────
     mongo_id = store_trade_finance_result(
-    extracted_results=summarized_data,
-    object_url=merge_result["object_url"],
-    filename=merge_result["filename"],
-    original_s3_file=merge_result["s3_key"],
-    email_text="Email subject: NMD Emirates"
-)
+        extracted_results=summarized_data,
+        object_url=merge_result["object_url"],
+        filename=merge_result["filename"],
+        original_s3_file=merge_result["s3_key"],
+        email_text=f"Email subject: {email_subject}"
+    )
     print("✅ Mongo Document ID:", mongo_id)
 
-    # --------------------------------
-    # Step 7: Final return object
-    # --------------------------------
     return {
         "documents_extracted": final_llm_results,
-        "summary": summarized_data,
-        "merged_pdf": merge_result
+        "summary":             summarized_data,
+        "merged_pdf":          merge_result
     }
 
 
 def run_live():
     print("🚀 Starting LIVE email processing service (poll every 5 seconds)...")
-
     try:
         while True:
             try:
                 print("\n⏳ Checking for new emails...")
                 result = main()
-                print('Final Results',result)
+                print("Final Results:", result)
 
                 if not result or not result.get("documents_extracted"):
                     print("📭 No new attachments found")

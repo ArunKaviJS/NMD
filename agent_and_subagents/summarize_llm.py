@@ -6,280 +6,184 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-SYSTEM_PROMPT = """
+# ─────────────────────────────────────────────
+# CALL 1 — STRUCTURED FIELD EXTRACTION ONLY
+# ─────────────────────────────────────────────
+EXTRACTION_SYSTEM_PROMPT = """
+You are an expert trade finance document analyst.
 
-You are an expert trade finance document analyst specializing in Letter of Credit (LC) compliance checks.
+INPUT: JSON with key "extracted_results" — a list of documents, each with:
+  - file_name
+  - doc_type
+  - extracted_data
 
-INPUT: A JSON list of extracted trade finance documents, each with: file_name, doc_type, extracted_data.
+TASK: Extract structured fields from each document into the schema below.
+Return ONE flat JSON object with ONLY the "Extracted_results" key.
+No compliance checks. No comparison. Extraction only.
 
-Your task has TWO parts: PART 1 — Structured Field Extraction. PART 2 — Cross-Document Compliance Checks.
+RULES:
+- All dates in DD MMM YYYY format.
+- Copy values exactly as printed — no normalization.
+- If a field is absent → null.
+- Arrays (lc_required_documents, lc_special_conditions, bl_container_numbers) contain plain strings only.
+- Return ONLY valid JSON. No text before or after.
 
-═══════════════════════════════
-GLOBAL RULES — NON-NEGOTIABLE
-═══════════════════════════════
-
-G1 — STATUS ALWAYS LAST: In every check object, populate all other fields before writing "status". Never write status first.
-
-G2 — STATUS MUST MATCH EVIDENCE: Read back your own details before setting status. If details say "NOT MATCH" or show a difference → status = FAIL/NOT MATCH. If details say "all match" or difference = 0 → status = PASS/MATCH. No exceptions.
-
-G3 — EXPLICIT ARITHMETIC: Write every financial calculation in full: A × B = C or A + B + C = D. Never copy a document value as a "calculated" result.
-
-G4 — DIFFERENCE CALCULATION: After every numeric comparison: difference = calculated_value − stated_value. Show this subtraction. If difference = 0.00 → values match. If difference ≠ 0.00 → values do not match. NEVER write difference = 0.00 if the two values differ.
-
-G5 — NO SELF-CONTRADICTION: Never write "X matches Y" if X ≠ Y. Never write PASS if difference ≠ 0.00. Never write MATCH if documents show different values. Digit-by-digit self-check before assigning status.
-
-G6 — NAME CONSISTENCY: Compare strings exactly character by character. Any difference (spelling, abbreviation, extra word, Ltd vs Limited, spacing) → FAIL.
-
-G7 — NEVER DROP A FIELD: Every key defined for a check MUST appear. If a document is missing → use null for extracted fields, "UNABLE TO CHECK — document missing" for comparison fields.
-
-═══════════════════════════════
-FIELD OWNERSHIP TABLE
-═══════════════════════════════
-
-Every check has: "name", "detail", "severity", "status" (status always last).
-ADDITIONAL fields only for the checks listed below:
-
-  CHECK NAME                       EXTRA FIELDS & POSITION
-  ─────────────────────────────────────────────────────────
-  Exporter Name                  → "discrepancy" after "detail"
-  Importer / Consignee           → "discrepancy" after "detail"
-  LC Amount vs Invoice CIF       → "short_brief" after "detail"
-  Invoice Arithmetic — FOB       → "short_brief" after "detail"
-  Invoice Arithmetic — CIF       → "short_brief" after "detail"
-  Insurance Coverage Check       → "short_brief" after "detail"
-  BOE Amount vs Invoice CIF      → "short_brief" after "detail"
-  Presentation Period            → "short_brief" after "detail"
-  Stale B/L Check                → "short_brief" after "detail"
-  LC Required Documents Checklist→ "short_brief" after "detail", then "documents"
-  ─────────────────────────────────────────────────────────
-  Order: name → detail → [discrepancy?] → [short_brief?] → [documents?] → severity → status
-
-All other 20 checks: name, detail, severity, status ONLY. Do NOT add short_brief/discrepancy/documents to them.
-
-═══════════════════════════════
-30 MANDATORY CHECKS — EXACT ORDER
-═══════════════════════════════
-
-Results array MUST contain exactly these 30 checks in this order. Verify all 30 before output.
-
-01. Exporter Name                         16. Gross Weight
-02. Importer / Consignee                  17. Commodity Description
-03. LC Amount vs Invoice CIF              18. HS Code
-04. Invoice Arithmetic — FOB              19. Quantity and Unit
-05. Invoice Arithmetic — CIF              20. Date — Invoice vs B/L On-Board
-06. Insurance Coverage Check              21. Date — B/L vs LC Latest Shipment
-07. BOE Amount vs Invoice CIF             22. Date — Insurance vs B/L On-Board
-08. Incoterm Consistency                  23. Date — Inspection vs B/L On-Board
-09. Port of Loading                       24. Date — All Documents vs LC Expiry
-10. Port of Discharge                     25. Presentation Period
-11. Vessel Consistency                    26. Stale B/L Check
-12. B/L On-Board Date vs LC Latest        27. LC Required Documents Checklist
-    Shipment Deadline                     28. Partial Shipment
-13. B/L Date vs Invoice Date              29. Transhipment
-14. Package Count                         30. Third Party Documents
-15. Net Weight
-
-If a check cannot run (missing document): set detail = "UNABLE TO CHECK — [doc] not provided.", severity = null, status = "UNABLE TO CHECK". For checks with extra fields: discrepancy/short_brief = "UNABLE TO CHECK — document missing", documents = [].
-
-═══════════════════════════════
-VERDICT RULES
-═══════════════════════════════
-
-total_failed  = count of FAIL / NOT MATCH / NON-CONFORMING statuses
-total_passed  = count of PASS / MATCH statuses
-total_unable  = count of UNABLE TO CHECK statuses
-
-overall_verdict: "CLEAN PRESENTATION" if total_failed = 0 | "DISCREPANT PRESENTATION" if total_failed > 0
-
-overall_summary: 2-3 sentences. State: 30 checks run, total_passed, total_failed, total_unable, name every failed check.
-
-═══════════════════════════════
-OUTPUT — SINGLE FLAT JSON OBJECT
-═══════════════════════════════
-
-CRITICAL OUTPUT RULES:
-- ONE flat JSON object. No nested objects outside defined schema.
-- "status" is the LAST field in every check object.
-- All values are plain strings or arrays of plain strings.
-- Arrays (lc_required_documents, lc_special_conditions, bl_container_numbers) contain plain strings ONLY.
-- The "documents" array inside check 27 is the ONLY array that may contain objects.
-- Return ONLY the JSON. No text before or after.
-
+OUTPUT SCHEMA:
 {
   "Extracted_results": {
-    "letter_of_credit": {
-      "title": "Letter of Credit",
-      "results": [{
-        "lc_number": "",
-        "lc_issue_date": "",
-        "lc_expiry_date": "",
-        "lc_expiry_place": "",
-        "lc_amount": "",
-        "lc_currency": "",
-        "lc_tolerance": "",
-        "lc_applicant": "",
-        "lc_beneficiary": "",
-        "lc_issuing_bank": "",
-        "lc_advising_bank": "",
-        "lc_latest_shipment_date": "",
-        "lc_incoterm": "",
-        "lc_port_of_loading": "",
-        "lc_port_of_discharge": "",
-        "lc_partial_shipment": "",
-        "lc_transhipment": "",
-        "lc_presentation_period": "",
-        "lc_commodity_description": "",
-        "lc_hs_code": "",
-        "lc_quantity": "",
-        "lc_required_documents": [],
-        "lc_special_conditions": []
-      }]
-    },
-    "commercial_invoice": {
-      "title": "Commercial Invoice",
-      "results": [{
-        "invoice_number": "",
-        "invoice_date": "",
-        "invoice_exporter_name_address": "",
-        "invoice_importer_name_address": "",
-        "invoice_lc_reference": "",
-        "invoice_goods_description": "",
-        "invoice_hs_code": "",
-        "invoice_quantity": "",
-        "invoice_unit_price": "",
-        "invoice_incoterm": "",
-        "invoice_total_fob": "",
-        "invoice_freight": "",
-        "invoice_insurance": "",
-        "invoice_total_cif": "",
-        "invoice_currency": "",
-        "invoice_port_of_loading": "",
-        "invoice_port_of_discharge": "",
-        "invoice_vessel": "",
-        "invoice_bank_details": ""
-      }]
-    },
-    "bill_of_lading": {
-      "title": "Bill of Lading",
-      "results": [{
-        "bl_number": "",
-        "bl_date_of_issue": "",
-        "bl_on_board_date": "",
-        "bl_shipper": "",
-        "bl_consignee": "",
-        "bl_notify_party": "",
-        "bl_vessel": "",
-        "bl_voyage": "",
-        "bl_port_of_loading": "",
-        "bl_port_of_discharge": "",
-        "bl_number_of_packages": "",
-        "bl_gross_weight": "",
-        "bl_cbm": "",
-        "bl_freight_terms": "",
-        "bl_incoterm": "",
-        "bl_lc_reference": "",
-        "bl_invoice_reference": "",
-        "bl_number_of_originals": "",
-        "bl_container_numbers": []
-      }]
-    },
-    "certificate_of_origin": {
-      "title": "Certificate of Origin",
-      "results": [{
-        "coo_certificate_number": "",
-        "coo_date": "",
-        "coo_exporter": "",
-        "coo_consignee": "",
-        "coo_issuing_authority": "",
-        "coo_country_of_origin": "",
-        "coo_port_of_loading": "",
-        "coo_port_of_discharge": "",
-        "coo_hs_code": "",
-        "coo_goods_description": "",
-        "coo_quantity": "",
-        "coo_net_weight": "",
-        "coo_gross_weight": "",
-        "coo_invoice_reference": ""
-      }]
-    },
-    "bill_of_exchange": {
-      "title": "Bill of Exchange",
-      "results": [{
-        "boe_number": "",
-        "boe_date": "",
-        "boe_drawer": "",
-        "boe_drawee": "",
-        "boe_pay_to_order_of": "",
-        "boe_amount_figures": "",
-        "boe_currency": "",
-        "boe_tenor": "",
-        "boe_lc_reference": "",
-        "boe_invoice_reference": "",
-        "boe_incoterm": "",
-        "boe_goods_description": ""
-      }]
-    },
-    "inspection_certificate": {
-      "title": "Inspection Certificate",
-      "results": [{
-        "inspection_cert_number": "",
-        "inspection_date": "",
-        "inspection_issuing_body": "",
-        "inspection_client_exporter": "",
-        "inspection_consignee": "",
-        "inspection_commodity": "",
-        "inspection_hs_code": "",
-        "inspection_quantity_inspected": "",
-        "inspection_net_weight": "",
-        "inspection_overall_conclusion": "",
-        "inspection_lc_reference": "",
-        "inspection_invoice_reference": ""
-      }]
-    },
-    "insurance_certificate": {
-      "title": "Insurance Certificate",
-      "results": [{
-        "insurance_policy_number": "",
-        "insurance_date": "",
-        "insurance_insured": "",
-        "insurance_beneficiary": "",
-        "insurance_sum_insured": "",
-        "insurance_cif_value": "",
-        "insurance_coverage_factor": "",
-        "insurance_coverage_type": "",
-        "insurance_vessel": "",
-        "insurance_port_of_loading": "",
-        "insurance_port_of_discharge": "",
-        "insurance_on_board_date": "",
-        "insurance_invoice_reference": ""
-      }]
-    },
-    "packing_list": {
-      "title": "Packing List",
-      "results": [{
-        "pl_date": "",
-        "pl_exporter": "",
-        "pl_consignee": "",
-        "pl_lc_reference": "",
-        "pl_invoice_reference": "",
-        "pl_hs_code": "",
-        "pl_total_packages": "",
-        "pl_total_net_weight": "",
-        "pl_total_gross_weight": "",
-        "pl_total_cbm": "",
-        "pl_vessel": "",
-        "pl_port_of_loading": "",
-        "pl_port_of_discharge": "",
-        "pl_marks_and_numbers": ""
-      }]
-    }
-  },
-  "Comparison_results": {
-    "total_passed": "",
-    "total_failed": "",
-    "total_unable": "",
-    "overall_verdict": "",
-    "overall_summary": "",
+    "letter_of_credit": { "title": "Letter of Credit", "results": [{
+      "lc_number": null, "lc_issue_date": null, "lc_expiry_date": null,
+      "lc_expiry_place": null, "lc_amount": null, "lc_currency": null,
+      "lc_tolerance": null, "lc_applicant": null, "lc_beneficiary": null,
+      "lc_issuing_bank": null, "lc_advising_bank": null,
+      "lc_latest_shipment_date": null, "lc_incoterm": null,
+      "lc_port_of_loading": null, "lc_port_of_discharge": null,
+      "lc_partial_shipment": null, "lc_transhipment": null,
+      "lc_presentation_period": null, "lc_commodity_description": null,
+      "lc_hs_code": null, "lc_quantity": null,
+      "lc_required_documents": [], "lc_special_conditions": []
+    }]},
+    "commercial_invoice": { "title": "Commercial Invoice", "results": [{
+      "invoice_number": null, "invoice_date": null,
+      "invoice_exporter_name_address": null, "invoice_importer_name_address": null,
+      "invoice_lc_reference": null, "invoice_goods_description": null,
+      "invoice_hs_code": null, "invoice_quantity": null, "invoice_unit_price": null,
+      "invoice_incoterm": null, "invoice_total_fob": null, "invoice_freight": null,
+      "invoice_insurance": null, "invoice_total_cif": null, "invoice_currency": null,
+      "invoice_port_of_loading": null, "invoice_port_of_discharge": null,
+      "invoice_vessel": null, "invoice_bank_details": null
+    }]},
+    "bill_of_lading": { "title": "Bill of Lading", "results": [{
+      "bl_number": null, "bl_date_of_issue": null, "bl_on_board_date": null,
+      "bl_shipper": null, "bl_consignee": null, "bl_notify_party": null,
+      "bl_vessel": null, "bl_voyage": null, "bl_port_of_loading": null,
+      "bl_port_of_discharge": null, "bl_number_of_packages": null,
+      "bl_gross_weight": null, "bl_cbm": null, "bl_freight_terms": null,
+      "bl_incoterm": null, "bl_lc_reference": null, "bl_invoice_reference": null,
+      "bl_number_of_originals": null, "bl_container_numbers": []
+    }]},
+    "certificate_of_origin": { "title": "Certificate of Origin", "results": [{
+      "coo_certificate_number": null, "coo_date": null, "coo_exporter": null,
+      "coo_consignee": null, "coo_issuing_authority": null,
+      "coo_country_of_origin": null, "coo_port_of_loading": null,
+      "coo_port_of_discharge": null, "coo_hs_code": null,
+      "coo_goods_description": null, "coo_quantity": null,
+      "coo_net_weight": null, "coo_gross_weight": null, "coo_invoice_reference": null
+    }]},
+    "bill_of_exchange": { "title": "Bill of Exchange", "results": [{
+      "boe_number": null, "boe_date": null, "boe_drawer": null,
+      "boe_drawee": null, "boe_pay_to_order_of": null, "boe_amount_figures": null,
+      "boe_currency": null, "boe_tenor": null, "boe_lc_reference": null,
+      "boe_invoice_reference": null, "boe_incoterm": null, "boe_goods_description": null
+    }]},
+    "inspection_certificate": { "title": "Inspection Certificate", "results": [{
+      "inspection_cert_number": null, "inspection_date": null,
+      "inspection_issuing_body": null, "inspection_client_exporter": null,
+      "inspection_consignee": null, "inspection_commodity": null,
+      "inspection_hs_code": null, "inspection_quantity_inspected": null,
+      "inspection_net_weight": null, "inspection_overall_conclusion": null,
+      "inspection_lc_reference": null, "inspection_invoice_reference": null
+    }]},
+    "insurance_certificate": { "title": "Insurance Certificate", "results": [{
+      "insurance_policy_number": null, "insurance_date": null,
+      "insurance_insured": null, "insurance_beneficiary": null,
+      "insurance_sum_insured": null, "insurance_cif_value": null,
+      "insurance_coverage_factor": null, "insurance_coverage_type": null,
+      "insurance_vessel": null, "insurance_port_of_loading": null,
+      "insurance_port_of_discharge": null, "insurance_on_board_date": null,
+      "insurance_invoice_reference": null
+    }]},
+    "packing_list": { "title": "Packing List", "results": [{
+      "pl_date": null, "pl_exporter": null, "pl_consignee": null,
+      "pl_lc_reference": null, "pl_invoice_reference": null, "pl_hs_code": null,
+      "pl_total_packages": null, "pl_total_net_weight": null,
+      "pl_total_gross_weight": null, "pl_total_cbm": null, "pl_vessel": null,
+      "pl_port_of_loading": null, "pl_port_of_discharge": null,
+      "pl_marks_and_numbers": null
+    }]}
+  }
+}
+"""
+
+
+# ─────────────────────────────────────────────
+# CALL 2 — COMPLIANCE CHECKS ONLY
+# ─────────────────────────────────────────────
+COMPARISON_SYSTEM_PROMPT = """
+You are an expert trade finance LC compliance analyst.
+
+INPUT: JSON with key "Extracted_results" — structured fields already extracted
+from all trade finance documents (LC, Invoice, B/L, COO, BOE, Inspection,
+Insurance, Packing List).
+
+TASK: Run exactly 30 compliance checks and return ONE flat JSON object
+with ONLY the "Comparison_results" key. No re-extraction.
+
+════════════════════════════
+GLOBAL RULES — NON-NEGOTIABLE
+════════════════════════════
+G1: "status" ALWAYS the LAST field in each check object.
+G2: Set status ONLY AFTER writing details; must match evidence.
+G3: Show full arithmetic for every calculation (A×B=C, A+B=C, A−B=C).
+G4: Always compute: difference = calculated − stated. Show subtraction.
+    If difference=0.00 → match. If difference≠0.00 → no match.
+G5: No contradictions. Never write PASS where difference≠0.00.
+G6: String comparison = exact character-by-character match.
+G7: Missing document → detail="UNABLE TO CHECK — [doc] missing",
+    severity=null, status="UNABLE TO CHECK",
+    extra fields → "UNABLE TO CHECK — document missing".
+
+════════════════════════════
+FIELD OWNERSHIP — EXTRA FIELDS
+════════════════════════════
+All checks: name, detail, severity, status (status always last).
+
+Extra fields ONLY for:
+  Exporter Name, Importer / Consignee  → discrepancy (after detail)
+  Checks 3–7, 25, 26, 27              → short_brief (after detail/discrepancy)
+  Check 27 only                        → documents array (after short_brief)
+
+Do NOT add these fields to any other check.
+
+════════════════════════════
+MANDATORY 30 CHECKS — EXACT ORDER
+════════════════════════════
+01. Exporter Name
+02. Importer / Consignee
+03. LC Amount vs Invoice CIF
+04. Invoice Arithmetic — FOB
+05. Invoice Arithmetic — CIF
+06. Insurance Coverage Check
+07. BOE Amount vs Invoice CIF
+08. Incoterm Consistency
+09. Port of Loading
+10. Port of Discharge
+11. Vessel Consistency
+12. B/L On-Board Date vs LC Latest Shipment Deadline
+13. B/L Date vs Invoice Date
+14. Package Count
+15. Net Weight
+16. Gross Weight
+17. Commodity Description
+18. HS Code
+19. Quantity and Unit
+20. Date — Invoice vs B/L On-Board
+21. Date — B/L vs LC Latest Shipment
+22. Date — Insurance vs B/L On-Board
+23. Date — Inspection vs B/L On-Board
+24. Date — All Documents vs LC Expiry
+25. Presentation Period
+26. Stale B/L Check
+27. LC Required Documents Checklist
+28. Partial Shipment
+29. Transhipment
+30. Third Party Documents
+
+════════════════════════════
+CHECK LOGIC (CONDENSED)
+════════════════════════════
+"Comparison_results": {
+    
     "results": [
       {
         "name": "Exporter Name",
@@ -481,7 +385,12 @@ CRITICAL OUTPUT RULES:
         "status": "PASS if issuer meets LC requirement | FAIL if not | PASS if no restriction stated | UNABLE TO CHECK"
       }
     ]
-  }
+  },
+  "total_passed": "",
+    "total_failed": "",
+    "total_unable": "",
+    "overall_verdict": "",
+    "overall_summary": ""
 }
 
 ═══════════════════════════════
@@ -510,7 +419,34 @@ COUNTING:
 [ ] overall_verdict matches total_failed
 
 If any check is missing — insert before returning. Fewer than 30 checks = structural violation.
+════════════════════════════
+VERDICT RULES
+════════════════════════════
+total_failed  = count(FAIL + NOT MATCH + NON-CONFORMING)
+total_passed  = count(PASS + MATCH)
+total_unable  = count(UNABLE TO CHECK)
+overall_verdict: "CLEAN PRESENTATION" if failed=0 | "DISCREPANT PRESENTATION" if failed>0
+overall_summary: "30 checks run: X passed, Y failed, Z unable. Failed checks: [names]."
+
+════════════════════════════
+OUTPUT SCHEMA
+════════════════════════════
+{
+  "Comparison_results": { 
+    "results": [ /* exactly 30 check objects */ ],
+    "total_passed": "",
+    "total_failed": "",
+    "total_unable": "",
+    "overall_verdict": "",
+    "overall_summary": ""
+  }
+}
+
+Return ONLY valid JSON. No text before or after.
+Exactly 30 check objects in results — no more, no less.
 """
+
+
 class SummarizeLLM:
 
     def __init__(self):
@@ -521,87 +457,149 @@ class SummarizeLLM:
         )
         self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
-    def _safe_json_parse(self, text: str) -> dict:
-        """
-        Safely extract JSON object from LLM output
-        """
-        if not text:
-            raise ValueError("LLM returned empty response")
+    # ─────────────────────────────────────────────
+    # SHARED HELPERS
+    # ─────────────────────────────────────────────
 
-        # Remove markdown ```json ``` wrappers
-        text = text.strip()
+    def _call_llm(self, system_prompt: str, user_content: dict,
+                  max_tokens: int, call_label: str) -> str:
+        """Single LLM call wrapper with finish_reason guard."""
+        response = self.client.chat.completions.create(
+            model=self.deployment,
+            temperature=0,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": json.dumps(user_content)}
+            ],
+        )
+        finish_reason = response.choices[0].finish_reason
+        raw = response.choices[0].message.content.strip()
+
+        print(f"\n{'='*60}")
+        print(f"[{call_label}] finish_reason={finish_reason} | chars={len(raw)}")
+        print(raw[:500], "..." if len(raw) > 500 else "")
+
+        if finish_reason != "stop":
+            raise ValueError(
+                f"[{call_label}] Output truncated (finish_reason='{finish_reason}'). "
+                f"Increase max_tokens or reduce input."
+            )
+        return raw
+
+    def _safe_json_parse(self, text: str, call_label: str) -> dict:
+        """Strip markdown fences and parse JSON."""
         text = re.sub(r"```json|```", "", text, flags=re.IGNORECASE).strip()
-
-        # Extract first JSON object
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
-            raise ValueError(f"No JSON object found in LLM output:\n{text}")
-
+            raise ValueError(
+                f"[{call_label}] No JSON object found in output:\n{text[:300]}"
+            )
         return json.loads(match.group(0))
 
+    # ─────────────────────────────────────────────
+    # CALL 1 — EXTRACTION
+    # ─────────────────────────────────────────────
+
+    def _call1_extract(self, extracted_results: list) -> dict:
+        """
+        Send raw per-document extracted_data to GPT-4o.
+        Input key:  "extracted_results" (list of {file_name, doc_type, extracted_data})
+        Output key: "Extracted_results" (8 structured document sections)
+        """
+        raw = self._call_llm(
+            system_prompt=EXTRACTION_SYSTEM_PROMPT,
+            user_content={"extracted_results": extracted_results},
+            max_tokens=6000,
+            call_label="CALL-1 EXTRACTION"
+        )
+        parsed = self._safe_json_parse(raw, "CALL-1 EXTRACTION")
+
+        if "Extracted_results" not in parsed:
+            raise ValueError(
+                f"[CALL-1] Missing 'Extracted_results' key. "
+                f"Keys found: {list(parsed.keys())}"
+            )
+        return parsed   # { "Extracted_results": { 8 doc sections } }
+
+    # ─────────────────────────────────────────────
+    # CALL 2 — COMPARISON
+    # ─────────────────────────────────────────────
+
+    def _call2_compare(self, structured_extracted: dict) -> dict:
+        """
+        Send the structured Extracted_results to GPT-4o for 30 compliance checks.
+        Input key:  "Extracted_results" (from Call 1 output)
+        Output key: "Comparison_results" (30 checks + verdict)
+        """
+        raw = self._call_llm(
+            system_prompt=COMPARISON_SYSTEM_PROMPT,
+            user_content={"Extracted_results": structured_extracted},
+            max_tokens=8000,
+            call_label="CALL-2 COMPARISON"
+        )
+        parsed = self._safe_json_parse(raw, "CALL-2 COMPARISON")
+
+        if "Comparison_results" not in parsed:
+            raise ValueError(
+                f"[CALL-2] Missing 'Comparison_results' key. "
+                f"Keys found: {list(parsed.keys())}"
+            )
+
+        results = parsed["Comparison_results"].get("results", [])
+        if len(results) != 30:
+            raise ValueError(
+                f"[CALL-2] Expected 30 checks, got {len(results)}. "
+                f"Output may be truncated or prompt not followed."
+            )
+        return parsed   # { "Comparison_results": { results, totals, verdict } }
+
+    # ─────────────────────────────────────────────
+    # PUBLIC ENTRY POINT
+    # ─────────────────────────────────────────────
+
     def extract(self, payload: dict) -> dict:
-      documents = payload.get("documents", [])
-      missing_documents = payload.get("missing_documents", [])
+        """
+        Two-call pipeline.
 
-      """
-      Send normalized document data to LLM and get structured JSON output
-      ready for MongoDB storage.
-      """
-
-      response = self.client.chat.completions.create(
-          model=self.deployment,
-          temperature=0,    
-          max_tokens=8000,          # ← CRITICAL: must be high enough for full 30-check JSON
-          response_format={"type": "json_object"},   # ← forces valid JSON output (Azure OpenAI GPT-4o/turbo)
-          messages=[
-              {"role": "system", "content": SYSTEM_PROMPT},
-              {
-                  "role": "user",
-                  "content": json.dumps({
-                      "documents": documents,
-                      "missing_documents": missing_documents
-                  })
-              }
+        Expected payload:
+        {
+          "extracted_results": [
+            { "file_name": "...", "doc_type": "...", "extracted_data": {...} },
+            ...
           ],
-      )
+          "missing_documents": ["Document Name", ...]
+        }
 
-      raw_output = response.choices[0].message.content.strip()
+        Returns merged dict:
+        {
+          "Extracted_results":  { 8 structured doc sections },
+          "Comparison_results": { 30 checks + verdict },
+          "missing_documents":  [ ... ]
+        }
+        """
+        extracted_results = payload.get("extracted_results", [])
+        missing_documents = payload.get("missing_documents", [])
 
-      # Debug / audit log
-      print("\n🏦 TRADE FINANCE COMPLIANCE SUMMARY:\n")
-      print(raw_output)
+        # ── CALL 1: structured extraction ──────────────
+        print("\n🔍 CALL 1 — Structured Field Extraction...")
+        call1_output = self._call1_extract(extracted_results)
 
-      # Check if output was truncated (finish_reason != "stop" means cut off)
-      finish_reason = response.choices[0].finish_reason
-      if finish_reason != "stop":
-          raise ValueError(
-              f"LLM output was truncated (finish_reason='{finish_reason}'). "
-              f"Increase max_tokens or reduce input size."
-          )
+        # ── CALL 2: 30 compliance checks ───────────────
+        print("\n📋 CALL 2 — Compliance Checks (30)...")
+        call2_output = self._call2_compare(extracted_results)
 
-      # Parse into dict (safe)
-      parsed_output = self._safe_json_parse(raw_output)
+        # ── Merge and return ───────────────────────────
+        final = {
+            "Extracted_results":  call1_output["Extracted_results"],
+            "Comparison_results": call2_output["Comparison_results"],
+            "missing_documents":  missing_documents if missing_documents else []
+        }
 
-      # Attach missing documents under correct key matching prompt output schema
-      parsed_output["missing_documents"] = (
-          missing_documents if missing_documents else []
-      )
+        for key in ("Extracted_results", "Comparison_results"):
+            if key not in final:
+                raise ValueError(f"Final merged output missing key: '{key}'")
 
-      # Validate correct top-level keys from prompt output schema
-      required_keys = ["Extracted_results", "Comparison_results"]
-      for key in required_keys:
-          if key not in parsed_output:
-              raise ValueError(
-                  f"LLM output is missing required top-level key: '{key}'. "
-                  f"Keys found: {list(parsed_output.keys())}"
-              )
-
-      # Validate 30 checks are present
-      results = parsed_output.get("Comparison_results", {}).get("results", [])
-      if len(results) != 30:
-          raise ValueError(
-              f"Expected 30 compliance checks in results array, got {len(results)}. "
-              f"Output may have been truncated or prompt not followed."
-          )
-
-      return parsed_output
+        print("\n✅ Both calls complete. Final output ready.")
+        return final
