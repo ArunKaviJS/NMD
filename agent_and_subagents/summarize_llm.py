@@ -425,8 +425,8 @@ VERDICT RULES
 total_failed  = count(FAIL + NOT MATCH + NON-CONFORMING)
 total_passed  = count(PASS + MATCH)
 total_unable  = count(UNABLE TO CHECK)
-overall_verdict: "CLEAN PRESENTATION" if failed=0 | "DISCREPANT PRESENTATION" if failed>0
-overall_summary: "30 checks run: X passed, Y failed, Z unable. Failed checks: [names]."
+overall_verdict: "FILL: CLEAN PRESENTATION if total_failed = 0 | DISCREPANT PRESENTATION if total_failed > 0"
+overall_summary: "FILL: 2-3 sentence plain English summary — state total checks run, how many passed, how many failed, list the critical findings by name"
 
 ════════════════════════════
 OUTPUT SCHEMA
