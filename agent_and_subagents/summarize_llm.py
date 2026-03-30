@@ -123,24 +123,24 @@ with ONLY the "Comparison_results" key. No re-extraction.
 GLOBAL RULES — NON-NEGOTIABLE
 ════════════════════════════
 G1: "status" ALWAYS the LAST field in each check object.
-G2: Set status ONLY AFTER writing details; must match evidence.
+G2: Set status ONLY AFTER writing short_brief; must match evidence.
 G3: Show full arithmetic for every calculation (A×B=C, A+B=C, A−B=C).
 G4: Always compute: difference = calculated − stated. Show subtraction.
     If difference=0.00 → match. If difference≠0.00 → no match.
 G5: No contradictions. Never write PASS where difference≠0.00.
 G6: String comparison = exact character-by-character match.
-G7: Missing document → detail="UNABLE TO CHECK — [doc] missing",
+G7: Missing document → short_brief="UNABLE TO CHECK — [doc] missing",
     severity=null, status="UNABLE TO CHECK",
     extra fields → "UNABLE TO CHECK — document missing".
 
 ════════════════════════════
 FIELD OWNERSHIP — EXTRA FIELDS
 ════════════════════════════
-All checks: name, detail, severity, status (status always last).
+All checks: name, short_brief, severity, status (status always last).
 
 Extra fields ONLY for:
-  Exporter Name, Importer / Consignee  → discrepancy (after detail)
-  Checks 3–7, 25, 26, 27              → short_brief (after detail/discrepancy)
+  Exporter Name, Importer / Consignee  → short_brief (after detail)
+  Checks 3–7, 25, 26, 27              → short_brief (after detail)
   Check 27 only                        → documents array (after short_brief)
 
 Do NOT add these fields to any other check.
@@ -188,14 +188,14 @@ CHECK LOGIC (CONDENSED)
       {
         "name": "Exporter Name",
         "detail": "Copy exact exporter/shipper/assured/client name from each doc verbatim — Invoice=[v], Packing List=[v], B/L shipper=[v], COO=[v], Insurance assured=[v], Inspection client=[v], BOE drawer=[v]. No normalization.",
-        "discrepancy": "If MATCH: 'All 7 documents show identical exporter name: [name].' If NOT MATCH: list each differing document and its exact value.",
+        "short_brief": "If MATCH: 'All 7 documents show identical exporter name: [name].' If NOT MATCH: list each differing document and its exact value.",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Importer / Consignee",
         "detail": "Copy exact consignee name from each doc verbatim — Invoice=[v], B/L=[v], COO=[v], Insurance beneficiary/notify=[v], Inspection consignee=[v]. No normalization.",
-        "discrepancy": "If MATCH: 'All 5 documents show identical importer/consignee name: [name].' If NOT MATCH: list each differing document and its exact value.",
+        "short_brief": "If MATCH: 'All 5 documents show identical importer/consignee name: [name].' If NOT MATCH: list each differing document and its exact value.",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
@@ -236,103 +236,103 @@ CHECK LOGIC (CONDENSED)
       },
       {
         "name": "Incoterm Consistency",
-        "detail": "Invoice=[exact v], B/L=[exact v], LC=[exact v]. If all identical: 'All 3 documents show the same incoterm: [v].' Note: CFR and CIF are different — flag explicitly if mixed.",
+        "short_brief": "Invoice=[exact v], B/L=[exact v], LC=[exact v]. If all identical: 'All 3 documents show the same incoterm: [v].' Note: CFR and CIF are different — flag explicitly if mixed.",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Port of Loading",
-        "detail": "Invoice=[exact v], B/L=[exact v], COO=[exact v], LC=[exact v]. If all identical: 'All 4 documents show the same port of loading: [v].'",
+        "short_brief": "Invoice=[exact v], B/L=[exact v], COO=[exact v], LC=[exact v]. If all identical: 'All 4 documents show the same port of loading: [v].'",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Port of Discharge",
-        "detail": "Invoice=[exact v], B/L=[exact v], Insurance=[exact v], LC=[exact v]. If all identical: 'All 4 documents show the same port of discharge: [v].'",
+        "short_brief": "Invoice=[exact v], B/L=[exact v], Insurance=[exact v], LC=[exact v]. If all identical: 'All 4 documents show the same port of discharge: [v].'",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Vessel Consistency",
-        "detail": "Invoice=[exact v], B/L=[exact v], Insurance=[exact v]. If all identical: 'All 3 documents show the same vessel: [v].'",
+        "short_brief": "Invoice=[exact v], B/L=[exact v], Insurance=[exact v]. If all identical: 'All 3 documents show the same vessel: [v].'",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "B/L On-Board Date vs LC Latest Shipment Deadline",
-        "detail": "bl_on_board_date=[v], lc_latest_shipment_date=[v]. If ≤: 'Shipment within LC deadline.' If >: 'CRITICAL — B/L on-board date exceeds LC latest shipment date by [X] days.'",
+        "short_brief": "bl_on_board_date=[v], lc_latest_shipment_date=[v]. If ≤: 'Shipment within LC deadline.' If >: 'CRITICAL — B/L on-board date exceeds LC latest shipment date by [X] days.'",
         "severity": "CRITICAL if FAIL | null if PASS",
         "status": "PASS if bl_on_board_date≤lc_latest_shipment_date | FAIL if > | UNABLE TO CHECK"
       },
       {
         "name": "B/L Date vs Invoice Date",
-        "detail": "invoice_date=[v], bl_date_of_issue=[v]. If invoice_date≤bl_date: 'Invoice precedes or equals B/L — acceptable.' If invoice_date>bl_date: 'Red flag — Invoice date is after B/L date.'",
+        "short_brief": "invoice_date=[v], bl_date_of_issue=[v]. If invoice_date≤bl_date: 'Invoice precedes or equals B/L — acceptable.' If invoice_date>bl_date: 'Red flag — Invoice date is after B/L date.'",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if invoice_date≤bl_date | FAIL if invoice_date>bl_date | UNABLE TO CHECK"
       },
       {
         "name": "Package Count",
-        "detail": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], COO=[exact v], Inspection=[exact v]. If all identical: 'All 5 documents show the same package count: [v].'",
+        "short_brief": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], COO=[exact v], Inspection=[exact v]. If all identical: 'All 5 documents show the same package count: [v].'",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Net Weight",
-        "detail": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], Inspection=[exact v]. Step 1: variance_mt = |inspection_net_weight − invoice_net_weight| — show arithmetic. Step 2: variance% = (variance_mt ÷ invoice_net_weight) × 100 — show arithmetic.",
+        "short_brief": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], Inspection=[exact v]. Step 1: variance_mt = |inspection_net_weight − invoice_net_weight| — show arithmetic. Step 2: variance% = (variance_mt ÷ invoice_net_weight) × 100 — show arithmetic.",
         "severity": "MAJOR if variance>0.5% and non-inspection doc differs | MINOR if only inspection variance>0.5% | null if all match",
         "status": "MATCH if all identical | WARNING if inspection variance>0.5% | NOT MATCH if non-inspection docs differ | UNABLE TO CHECK"
       },
       {
         "name": "Gross Weight",
-        "detail": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v]. If all identical: 'Gross weight matches across all 3 documents: [v].'",
+        "short_brief": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v]. If all identical: 'Gross weight matches across all 3 documents: [v].'",
         "severity": "MINOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Commodity Description",
-        "detail": "LC required description=[exact wording]. Invoice description=[exact wording]. Compare attribute by attribute. List any missing or mismatched attributes explicitly.",
+        "short_brief": "LC required description=[exact wording]. Invoice description=[exact wording]. Compare attribute by attribute. List any missing or mismatched attributes explicitly.",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "HS Code",
-        "detail": "Invoice=[exact v], Packing List=[exact v], COO=[exact v], Inspection=[exact v]. If all identical: 'All 4 documents show the same HS code: [v].'",
+        "short_brief": "Invoice=[exact v], Packing List=[exact v], COO=[exact v], Inspection=[exact v]. If all identical: 'All 4 documents show the same HS code: [v].'",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Quantity and Unit",
-        "detail": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], COO=[exact v]. Compare each value exactly character by character.",
+        "short_brief": "Invoice=[exact v], Packing List=[exact v], B/L=[exact v], COO=[exact v]. Compare each value exactly character by character.",
         "severity": "MAJOR if NOT MATCH | null if MATCH",
         "status": "MATCH or NOT MATCH or UNABLE TO CHECK"
       },
       {
         "name": "Date — Invoice vs B/L On-Board",
-        "detail": "invoice_date=[v], bl_on_board_date=[v]. If invoice_date≤bl_on_board_date: 'Date sequence correct.' If >: 'Date sequence violation.'",
+        "short_brief": "invoice_date=[v], bl_on_board_date=[v]. If invoice_date≤bl_on_board_date: 'Date sequence correct.' If >: 'Date sequence violation.'",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if invoice_date≤bl_on_board_date | FAIL if > | UNABLE TO CHECK"
       },
       {
         "name": "Date — B/L vs LC Latest Shipment",
-        "detail": "bl_date_of_issue=[v], lc_latest_shipment_date=[v]. If bl_date≤lc_latest_shipment_date: 'B/L date within LC latest shipment date.' If >: 'CRITICAL — B/L date exceeds LC latest shipment date.'",
+        "short_brief": "bl_date_of_issue=[v], lc_latest_shipment_date=[v]. If bl_date≤lc_latest_shipment_date: 'B/L date within LC latest shipment date.' If >: 'CRITICAL — B/L date exceeds LC latest shipment date.'",
         "severity": "CRITICAL if FAIL | null if PASS",
         "status": "PASS if bl_date≤lc_latest_shipment_date | FAIL if > | UNABLE TO CHECK"
       },
       {
         "name": "Date — Insurance vs B/L On-Board",
-        "detail": "insurance_date=[v], bl_on_board_date=[v]. If insurance_date≤bl_on_board_date: 'Insurance issued before or at shipment — acceptable.' If >: 'CRITICAL — goods were not insured at time of shipment.'",
+        "short_brief": "insurance_date=[v], bl_on_board_date=[v]. If insurance_date≤bl_on_board_date: 'Insurance issued before or at shipment — acceptable.' If >: 'CRITICAL — goods were not insured at time of shipment.'",
         "severity": "CRITICAL if FAIL | null if PASS",
         "status": "PASS if insurance_date≤bl_on_board_date | FAIL if > | UNABLE TO CHECK"
       },
       {
         "name": "Date — Inspection vs B/L On-Board",
-        "detail": "inspection_date=[v], bl_on_board_date=[v]. If inspection_date≤bl_on_board_date: 'Inspection completed before loading — acceptable.' If >: 'Goods were loaded before inspection.'",
+        "short_brief": "inspection_date=[v], bl_on_board_date=[v]. If inspection_date≤bl_on_board_date: 'Inspection completed before loading — acceptable.' If >: 'Goods were loaded before inspection.'",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if inspection_date≤bl_on_board_date | FAIL if > | UNABLE TO CHECK"
       },
       {
         "name": "Date — All Documents vs LC Expiry",
-        "detail": "lc_expiry_date=[v]. Check each document primary date: Commercial Invoice=[date] [PASS/FAIL], Bill of Lading=[date] [PASS/FAIL], COO=[date] [PASS/FAIL], Insurance=[date] [PASS/FAIL], Inspection=[date] [PASS/FAIL], BOE=[date] [PASS/FAIL], Packing List=[date] [PASS/FAIL]. Any date after lc_expiry_date = FAIL.",
+        "short_brief": "lc_expiry_date=[v]. Check each document primary date: Commercial Invoice=[date] [PASS/FAIL], Bill of Lading=[date] [PASS/FAIL], COO=[date] [PASS/FAIL], Insurance=[date] [PASS/FAIL], Inspection=[date] [PASS/FAIL], BOE=[date] [PASS/FAIL], Packing List=[date] [PASS/FAIL]. Any date after lc_expiry_date = FAIL.",
         "severity": "CRITICAL if any date exceeds LC expiry | null if all within",
         "status": "PASS if all dates≤lc_expiry_date | FAIL if any date> | UNABLE TO CHECK"
       },
@@ -368,19 +368,19 @@ CHECK LOGIC (CONDENSED)
       },
       {
         "name": "Partial Shipment",
-        "detail": "lc_partial_shipment=[exact LC value]. Number of B/L sets presented=[n]. State whether compliant or non-compliant with reason.",
+        "short_brief": "lc_partial_shipment=[exact LC value]. Number of B/L sets presented=[n]. State whether compliant or non-compliant with reason.",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if NOT ALLOWED and single B/L | FAIL if NOT ALLOWED and multiple B/Ls | PASS if ALLOWED | UNABLE TO CHECK"
       },
       {
         "name": "Transhipment",
-        "detail": "lc_transhipment=[exact LC value]. B/L routing=[direct or via transhipment port]. State whether compliant or non-compliant with reason.",
+        "short_brief": "lc_transhipment=[exact LC value]. B/L routing=[direct or via transhipment port]. State whether compliant or non-compliant with reason.",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if NOT ALLOWED and direct voyage | FAIL if NOT ALLOWED and transhipment shown | PASS if ALLOWED | UNABLE TO CHECK"
       },
       {
         "name": "Third Party Documents",
-        "detail": "LC clause on third-party docs=[exact LC clause or 'No restriction stated']. Inspection issuing body=[exact v]. State whether issuer is acceptable per LC terms.",
+        "short_brief": "LC clause on third-party docs=[exact LC clause or 'No restriction stated']. Inspection issuing body=[exact v]. State whether issuer is acceptable per LC terms.",
         "severity": "MAJOR if FAIL | null if PASS",
         "status": "PASS if issuer meets LC requirement | FAIL if not | PASS if no restriction stated | UNABLE TO CHECK"
       }
@@ -403,7 +403,7 @@ STRUCTURE:
 [ ] No check merged, skipped, or reordered
 
 FIELDS (per FIELD OWNERSHIP TABLE):
-[ ] name, detail, severity, status — on all 30
+[ ] name, detail, short_brief, severity, status — on all 30
 [ ] discrepancy — on checks 01 and 02 ONLY
 [ ] short_brief — on checks 03,04,05,06,07,25,26,27 ONLY
 [ ] documents array — on check 27 ONLY, fully populated
